@@ -1,8 +1,8 @@
 """CP-SAT definitive solver: substitution alphabet over base64-of-ASCII."""
 from ortools.sat.python import cp_model
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+param = open(r'samples/request_param.txt','r').read().strip()
 
 syms = sorted(set(conf) | set(param))
 idx = {s: i for i, s in enumerate(syms)}
@@ -112,9 +112,9 @@ if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print('CONF :', pt[:200])
         print('PARAM:', ptp[:150])
         if si == 0 or hits:
-            open(rf'Q:\Deepseek\_neo5\br\conf_pt_{si}.txt','wb').write(pt)
-            open(rf'Q:\Deepseek\_neo5\br\param_pt_{si}.txt','wb').write(ptp)
+            open(rf'samples/conf_pt_{si}.txt','wb').write(pt)
+            open(rf'samples/param_pt_{si}.txt','wb').write(ptp)
             import json
-            json.dump(m, open(rf'Q:\Deepseek\_neo5\br\alphabet_{si}.json','w'))
+            json.dump(m, open(rf'samples/alphabet_{si}.json','w'))
 
 

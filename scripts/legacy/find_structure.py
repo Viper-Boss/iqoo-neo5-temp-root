@@ -1,6 +1,6 @@
 import struct, json
 
-data = open(r"Q:\Deepseek\_neo5\firmware\kernel_Image", "rb").read()
+data = open(r"../../kernel_Image", "rb").read()
 
 # known segment of offsets table: 0x1f80f94 (starts at value 175980)
 # find table start: scan backward allowing non-decreasing (>=) values in [0, 0x4000000)
@@ -95,13 +95,13 @@ for layout in [(8,8),(8,4),(4,8),(4,4)]:
             # SUCCESS - dump everything
             for a, n in symbols[:3]: print(f"    {a:#x} {n.decode('latin-1')}")
             for a, n in symbols[-2:]: print(f"    {a:#x} {n.decode('latin-1')}")
-            with open(r"Q:\Deepseek\_neo5\firmware\kallsyms.txt","w") as f:
+            with open(r"../../kallsyms.txt","w") as f:
                 for a, n in symbols:
                     f.write(f"{a:016x} {n.decode('latin-1')}\n")
             json.dump({"offsets_start": start, "num_syms": num, "relative_base": rb,
                        "names_start": names_start, "token_table": 0x2159ecc,
                        "token_index": 0x215a2cc},
-                      open(r"Q:\Deepseek\_neo5\firmware\kallsyms_struct.json","w"))
+                      open(r"../../kallsyms_struct.json","w"))
             print("  SAVED kallsyms.txt")
             # target offsets
             symtab = {}
@@ -128,5 +128,5 @@ for layout in [(8,8),(8,4),(4,8),(4,4)]:
                 else:
                     l = f"/* {sy}: NOT FOUND */"
                 print("  "+l); out.append(l)
-            open(r"Q:\Deepseek\_neo5\firmware\target_offsets.txt","w").write("\n".join(out))
+            open(r"../../target_offsets.txt","w").write("\n".join(out))
         break

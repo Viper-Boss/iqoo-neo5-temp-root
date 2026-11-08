@@ -1,7 +1,7 @@
 import struct
 
-IMG = r"Q:\Deepseek\_neo5\firmware\kernel_Image"
-KAL = r"Q:\Deepseek\_neo5\firmware\kallsyms_fixed.txt"
+IMG = r"../../kernel_Image"
+KAL = r"../../kallsyms_fixed.txt"
 
 d = open(IMG, "rb").read()
 

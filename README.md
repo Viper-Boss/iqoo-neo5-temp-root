@@ -5,22 +5,21 @@
 > **Date**: 2026-11-08 ~ 2026-11-09
 > **Device**: iQOO Neo5 (V2055A / PD2055) · 骁龙870 (Snapdragon 870) · Android 14 · OriginOS 4
 > **Firmware**: PD2055_A_9.10.3 (kernel 4.19.152-perf+)
-> **Status**: 🟡 kallsyms 已 6 重独立验证(109,687符号) · futex 哈希模型经两次纠错后
-> 对照内核源码逐位验证 · typedef 反转 bug 已修复 · KernelSnitch 定位在原理上重新成立 ·
-> **设备端尚未用修复版重测，未取得 uid=0**
+> **Status**: 🟡 kallsyms 已 6 重独立验证(109,687符号) · futex 哈希模型经**反汇编目标内核**
+> 定论(vivo=mm@0/[mm,addr]，≠上游v4.19) · 用户态模型已与目标内核逐位对齐 ·
+> KernelSnitch 定位原理成立 · **设备端尚未用本版重测，未取得 uid=0**
 >
-> **纠错历史（重要）**：本仓库对 futex 哈希的结论错过两次——
-> ① 初稿"内核只哈希 2 个 u32、不含 mm"（错）；
-> ② e34852b"内核从 key+8 哈希 4 个 u32、仍不含 mm、KernelSnitch 方法论失效"（仍错，
->    因为对照的参考结构体也抄反了）；
-> ③ 当前版本逐字核对 v4.19 `futex.h`/`futex.c`，用**独立转录**的参考结构体单测，
->    确认 **`union futex_key` 是 word@0/ptr@8/offset@16，哈希 = [addr,mm]，依赖 mm**。
->    真正的 bug 是 exploit 的 typedef 字段顺序反了（上游 K40 移植版就有）。
+> **纠错历史（重要，务必读完 §8）**：对 futex 哈希的结论错过三次——
+> ① 初稿"内核只哈希 2 u32、不含 mm"（错）；
+> ② e34852b"从 key+8 哈希、不含 mm、方法论失效"（错，参考结构体抄反了，"错验错"）；
+> ③ fix/futex-key-layout"对照上游 v4.19 改成 address@0/[addr,mm]"（**对上游对、对 vivo 错**）；
+> ④ **本版**：反汇编 PD2055 真实内核 → **vivo 用旧 mainline 布局 mm@0、哈希=[mm,addr]，
+>    与上游 v4.19 相反**。原始 K40 exploit 的 typedef 本就匹配 vivo；③才是错的，已回退。
 >
-> **本轮修正**：①futex_key_t typedef 字段顺序（对齐内核）+ `_Static_assert` 钉死
-> ②单元测试改用独立内核参考结构体（不再"错验错"）③推翻"方法论失效"结论
-> ④`preload_diag`→`preload_noroot` 正名（它仍触发 CVE+写内核，非只读）
-> ⑤kallsyms 6 重独立验证 ⑥诊断安全边界三分类
+> **本轮(analysis/futex-disassembly)修正**：①反汇编目标内核定论 futex 布局/哈希/hashsize
+> ②typedef 回退到 vivo 布局 mm@0 + `_Static_assert` 钉死 ③单测参考改用反汇编字顺序[mm,addr]
+> ④修复 kernelsnitch_strings 缺项(6枚举vs5串)⑤boot.img 提取修正(0字节wrapper,非52)
+> ⑥scripts 去绝对路径、可复现流水线 ⑦诊断安全边界三分类(diag只读/noroot仍触发CVE)
 
 ---
 
@@ -43,12 +42,13 @@
 | CVE-2026-43499 futex UAF 触发 | ✅ 可用 | 每轮找到 3 个碰撞，设备稳定不崩溃 |
 | 固件获取（7GB 全量 OTA 包） | ✅ 可用 | 破解了 vivo 老版 OTA 协议（替换密码+base64） |
 | 内核 kallsyms 提取 | ✅ **6 重验证** | 109,687 符号；markers 429/429 + 段序 + 聚簇 + ARM64 抽查 |
+| boot.img 提取 | ✅ **已修正** | vendor wrapper=0 字节（旧"52字节头"是误判）；_text@文件0 |
 | target.h 符号偏移 | ✅ **已修正** | 旧值因名字错位而全错，现逐符号校正 |
-| futex 哈希模型 | ✅ **对照内核验证** | typedef 字段反转 bug 已修；哈希=[addr,mm]，依赖 mm；18/18 单测 |
+| futex 哈希模型 | ✅ **反汇编目标内核定论** | vivo=mm@0/[mm,addr]（≠上游v4.19）；16/16 单测（独立参考） |
 | NDK 构建 preload/noroot/diag | ✅ 可用 | aarch64，SHA256 已记录，可复现 |
-| KernelSnitch mm 定位 | 🟡 **原理成立,待重测** | 哈希不匹配根因已除；成功还需 mm尺寸/slab/扫描区间/时序/vivo未改哈希 |
+| KernelSnitch mm 定位 | 🟡 **原理成立,待重测** | 哈希已与目标内核对齐；成功还需 mm尺寸(已修)/slab(已修)/扫描区间/时序 |
 | 诊断安全边界 | ✅ 已厘清 | `diag_params` 只读安全；`preload_noroot` 仍触发CVE+写内核(非只读) |
-| 最终 uid=0 提权 | ⏳ **未达成** | 设备端未用修复版重测 |
+| 最终 uid=0 提权 | ⏳ **未达成** | 设备端未用本版重测 |
 
 ---
 
@@ -198,43 +198,51 @@ curl --noproxy '*' -L -C - --retry 30 \
 kernel_size=50759696, page_size=4096, kernel_addr=0x8000
 ```
 
-### 6.1 提取内核 Image
+### 6.1 提取内核 Image（已修正）
 
-内核数据块从偏移 `page_size`（4096）开始，但在真正的 ARM64 Image 前面有一个 52 字节的 vivo 包装头：
-```
-[52 字节 vivo 头][ARM64 内核 Image (48.4MB)]
-```
+内核 blob = `boot.img[page_size : page_size + kernel_size]`。ARM64 magic `"ARM\x64"`
+在 blob 偏移 **0x38**（标准位置），所以 **vendor 包装头 = 0 字节**，完整 Image =
+`blob[0:]`（50,759,696 B，`_text` 在文件偏移 0）。用 `scripts/extract_boot_image.py` 提取。
 
-### 6.2 vivo 的反逆向工程修改
+> ⚠️ 修正：早期分析误以为有"52 字节 vivo 头"并把 blob 砍掉前 52 字节
+> （`blob[52:]`），导致所有文件偏移错位 52。正确提取是 `blob[0:]`。
+> 本节下面给出的结构偏移都是**正确 Image** 内的偏移。
 
-vivo 修改了内核以阻碍 kallsyms 提取：
-1. **Image 头字段清零**：`text_offset=0, image_size=0, flags=0`（正常应该是 0x80000 等）
-2. **kallsyms_markers 用自定义格式**：u32 值按 8 字节步距存储（标准上游是紧凑 u32 数组）
-3. **符号过滤**：从 kallsyms 中**删除了提权敏感符号**（见 6.5）
+### 6.2 vivo 的反逆向工程修改（已修正）
+
+1. **kallsyms_markers 用自定义格式**：u32 值按 8 字节步距存储（标准上游是紧凑 u32 数组）
+2. **符号过滤**：从 kallsyms 中**删除了提权敏感符号**（见 6.5）
+3. **futex_key 布局与上游相反**：mm@0/address@8（见 §8，反汇编证实）
+
+> ⚠️ 修正：早期"Image 头字段被清零（text_offset=0/image_size=0/flags=0）"是**误判**——
+> 实际头字段完好：`text_offset=0x80000, image_size=0x3b84000, flags=0xa, code0=0x14960000`。
+> 那个"清零"印象来自被错误砍掉 52 字节后读错了位置。
 
 ### 6.3 我自研的 kallsyms 解析器（已逐字节验证）
 
-`vmlinux-to-elf`、`ghostlock-extract` 等工具在 vivo 的修改上都失败，我写了自定义解析器。
-**最终结构（全部经 markers 交叉验证）：**
+`vmlinux-to-elf`、`ghostlock-extract` 等工具都失败，我写了自定义解析器
+（`scripts/parse_kallsyms.py` + `verify_kallsyms.py`，结构常量在 `kallsyms_layout.json`）。
+**最终结构（正确 Image 内偏移，全部经 markers 交叉验证）：**
 
 ```
-Offsets table:  0x1f805cc .. 0x1feb7a8   (109,687 × s32, 首值=0, 尾值=0x3b80708, 0 单调违反)
-num_syms:       u32 @ 0x1feb8cc = 0x1AC77 = 109,687
-Names:          0x1feb9cc .. 0x215904e   ([u8 len][tokens], 4.19 格式, 无 0x80 扩展)
-Markers:        0x21590cc                (429 × u32 @ 8 字节步距)
-Token table:    0x2159ecc                (256 个令牌, 909 字节, token[48]='0')
-Token index:    0x215a2cc                (256 × u16, 验证 256/256)
+Offsets table:  0x1f80600 ..            (109,687 × s32, 首值=0, 尾值=0x3b80708, 0 单调违反)
+num_syms:       u32 @ 0x1feb900 = 0x1AC77 = 109,687
+Names:          0x1feba00 .. 0x2159082   ([u8 len][tokens], 4.19 格式, 无 0x80 扩展)
+Markers:        0x2159100                (429 × u32 @ 8 字节步距)
+Token table:    0x2159f00                (256 个令牌)
+Token index:    0x215a300                (256 × u16, 验证 256/256)
 ```
 
 **关键验证**：全部 **429 个 markers** 满足
 `markers[k] == (name[256*k] 的字节偏移) − names_start`，**429/429 精确匹配**。
 这从数学上证明了 names_start、num_syms、offsets 表对齐三者都逐字节正确。
-`_text` 偏移 == 0，说明 offsets 已经相对 `_text`（CONFIG_KALLSYMS_BASE_RELATIVE，
-relative_base 即 `_text` 的 VA）。
+`_text` 偏移 == 0，说明 offsets 已经相对 `_text`（CONFIG_KALLSYMS_BASE_RELATIVE）。
+另有 5 重独立校验（段序 text<rodata<data<bss、同源聚簇、ARM64 序言抽查等），
+见 `verify_kallsyms.py`（从 boot.img 一键复现，9/9 通过）。
 
-> 早期版本报告"109,641 个符号、names@0x1febb9b、offsets@0x1f805bc"是**错误**的：
-> names 起点偏晚了 50 条，导致所有名字与偏移错位配对，`init_task`/`commit_creds`
-> 等查不到。已用 num_syms(0x1AC77) 与 markers 交叉验证彻底修正为 109,687 条。
+> 早期版本曾报告"109,641 个符号、names@0x1febb9b、offsets@0x1f805bc"（错位 50 条），
+> 以及"names@0x1feb9cc、offsets@0x1f805cc"（旧 52 字节截断镜像的偏移）——均已被
+> 上面的正确值取代。符号偏移（kallsyms 值）与镜像提取方式无关，故 target.h 不受影响。
 
 ### 6.4 target.h 的关键符号（已修正的正确偏移，相对 _text）
 
@@ -321,133 +329,133 @@ adb shell "LD_PRELOAD=/data/local/tmp/preload.so id"
 
 **futex 碰撞检测正常工作**（CVE 触发是功能性的——我们可以通过时序检测哈希碰撞）。设备全程保持稳定（没有内核崩溃，感谢 `PANIC_ON_OOPS=0`）。
 
-> **关于 `mm_struct leak failed` 的根因更新**：这次设备运行用的是**修复前**的代码
-> （typedef 字段反转，见 §8.2）。碰撞发现阶段靠时序测量真实内核，所以成功；
-> 但暴力反推阶段用的用户态哈希因 typedef 反转而与内核不一致，导致定位失败。
-> **该根因已在 §8 修复，但尚未用修复版在真机重测**——这是下一轮的首要验证项。
+> **关于 `mm_struct leak failed` 的根因更新（经反汇编修正）**：这次设备运行用的是
+> **原始 K40 代码**。反汇编已证明原始的 `futex_key` typedef（mm@0）与 vivo 内核**一致**，
+> 所以**哈希布局不是失败原因**。真正可疑的是另外两个参数 bug：①`MM_STRUCT_SZ` 当时是
+> 0x340（错误，实测应为 0x3C0），导致暴力扫描的候选步长错误；②`util.c` 重试时把
+> `mm_slab_order` 重置为 0（错误，应为 3）。这两点会让 mm 候选地址枚举错位而泄漏失败。
+> 两者均已在本分支修复，且哈希布局已由反汇编确认正确——**但尚未用修复版在真机重测**。
 > 另注：日志里 `hashsize=0x800 (cpus=8)` 是设备真实值（8 核），与主机 24 核不同。
 
 ---
 
-## 8. 核心技术修正：futex 哈希模型（两次纠错，最终对照内核源码验证）
+## 8. futex 哈希模型：三次纠错，最终由**目标内核反汇编**定论
 
-> **本节经历了两次重大纠错，务必读完。**
-> - **第一版**（初稿）断言"内核只哈希 2 个 u32、不含 mm" → **错误**。
-> - **第二版**（commit e34852b）改成"内核从 key+8 哈希 4 个 u32、仍不含 mm，
->   KernelSnitch 方法论失效" → **仍然错误**，因为我对照的参考结构体也抄反了。
-> - **本版**（当前）直接逐字核对 Linux v4.19 `include/linux/futex.h` 与
->   `kernel/futex.c`，并用**独立转录**的参考结构体做单元测试 → 结论反转：
->   **哈希确实包含 mm，KernelSnitch 定位在原理上成立**。
+> **本节经历三次纠错，最终靠反汇编 vivo 真实内核拍板。务必读完，别再翻烧饼。**
+> - **v1**（初稿）："内核只哈希 2 个 u32、不含 mm" → 错。
+> - **v2**（commit e34852b）："内核从 key+8 哈希 4 个 u32、仍不含 mm、KernelSnitch
+>   方法论失效" → 错（参考结构体也抄反了，"错验错"假通过）。
+> - **v3**（上一分支 fix/futex-key-layout）：对照**上游 v4.19** `futex.h` 改成
+>   address@0/mm@8、哈希=[addr,mm] → **对上游对，但对 vivo 错**！
+> - **v4（本版，最终）**：**反汇编 PD2055 boot.img 内的真实内核**，铁证如下——
+>   **vivo 用旧版 mainline 布局：mm@0、address@8；哈希 = [mm_lo,mm_hi,addr_lo,addr_hi]。**
+>   与上游 v4.19（address@0/mm@8）**相反**。原始 K40 exploit 的 typedef 反而与 vivo 匹配；
+>   v3 的"修复"才是错的，现已回退到与 vivo 一致。
 
-### 8.1 权威依据：Linux v4.19 `union futex_key`（逐字核对）
+### 8.1 反汇编证据（完整见 `analysis/futex_disassembly_report.md`）
 
-来自 `include/linux/futex.h`（v4.19）：
+用 `scripts/extract_boot_image.py` 从 boot.img 提取 50,759,696 字节 ARM64 Image
+（**修正**：vendor wrapper=0 字节、text_offset=0x80000 未被清零——此前"52 字节 vivo 头 /
+头字段清零"均为误判），再用 `scripts/disasm_futex.py`（capstone）反汇编：
 
-```c
-union futex_key {
-    struct { unsigned long pgoff;   struct inode *inode;   int offset; } shared;
-    struct { unsigned long address; struct mm_struct *mm;  int offset; } private;
-    struct { unsigned long word;    void *ptr;             int offset; } both;
-};
+**(a) `get_futex_key` @0x1407d8 — key 字段布局：**
+```asm
+mrs   x24, sp_el0            ; x24 = current
+ldr   x23, [x24, #0x580]     ; x23 = current->mm   (task_struct.mm @0x580)
+and   w8, w0, #0xfff         ; w8 = uaddr & 0xfff  = 页内偏移
+str   w8, [x2, #0x10]        ; key[16] = offset
+sub   x21, x0, x8            ; x21 = 页对齐地址
+cbz   w1, #0x140a3c          ; 私有 futex 分支
+...
+0x140a3c: stp x23, x21, [x19] ; key[0]=x23=mm, key[8]=x21=address
 ```
+→ **mm@key+0，address@key+8，offset@key+16。**
 
-**LP64（arm64）字段偏移：**
+**(b) `get_task_mm` @0x3ccd8 — 交叉验证 task_struct.mm 偏移：**
+```asm
+ldr x20, [x21, #0x580]   ; x21=task, 返回值 x20=task->mm
 ```
-word / address / pgoff  @ 0
-ptr  / mm      / inode  @ 8
-offset                  @ 16   (tail padding @ 20..23, sizeof == 24)
-```
+→ **task_struct.mm @0x580 得证**，故 (a) 中 current->[0x580] 确为 mm。**不靠猜。**
 
-来自 `kernel/futex.c`（v4.19）的 `hash_futex()`：
-```c
-u32 hash = jhash2((u32*)&key->both.word,
-                  (sizeof(key->both.word)+sizeof(key->both.ptr))/4,  // (8+8)/4 = 4
-                  key->both.offset);
+**(c) 内联 `hash_futex`（futex_wake @0x13be10 等，全区共 12 处）：**
+```asm
+mov  w10, #0xbeff ; movk w10,#0xdead,lsl#16  ; 种子 0xdeadbeff
+ldur w9,  [x29,#-0x28]   ; key+0
+ldp  w11, w8, [x29,#-0x24] ; key+4, key+8
+ldp  w12, w26,[x29,#-0x1c] ; key+12, key+16(=offset)
+add  w10, w26, w10       ; init = 0xdeadbeff + offset
+... jhash2 mix (ror #28/#26/#24...) ...
 ```
-`&key->both.word == key+0`，所以内核哈希 **从 key+0 起的 4 个 u32**：
-```
-u32[0]=key+0  = word_lo = address_lo
-u32[1]=key+4  = word_hi = address_hi
-u32[2]=key+8  = ptr_lo  = mm_lo        ← mm 在这里！
-u32[3]=key+12 = ptr_hi  = mm_hi        ← mm 在这里！
-initval = both.offset = (address % PAGE_SIZE)
-```
-**结论：4.19 的 futex 哈希 = `jhash2([addr_lo, addr_hi, mm_lo, mm_hi], page_offset)`，
-明确包含 mm 指针。** `get_futex_key()`（futex.c ~515-535 行）也证实：私有 futex 设
-`both.offset = address % PAGE_SIZE; private.address = 页对齐地址(@0); private.mm = mm(@8)`，
-且整个 key 由 `FUTEX_KEY_INIT` 零初始化。
+- 种子 `0xdeadbeff = 0xdeadbeef + (4<<2)` → **哈希长度 = 4 个 u32**（12 处全部一致）。
+- 被哈希的 4 字 = **key+0,+4,+8,+12**（基址 key+0），initval = key+16(offset)。
+- 结合 (a)：哈希输入 = **[mm_lo, mm_hi, addr_lo, addr_hi]**。
 
-### 8.2 真正的 bug：exploit 的 `futex_key_t` typedef 字段顺序反了
-
-上游 K40 移植版（以及我 e34852b 之前照抄的版本）的 typedef 是：
-```c
-struct { void *mm; unsigned long address; ... } private;  // mm@0, address@8  ← 反了！
-struct { uint64_t ptr; unsigned long word; ... } both;    // ptr@0, word@8    ← 反了！
+**(d) `futex_init` @0x2597b30 — hashsize：**
+```asm
+lsl w8, w0, #8      ; 256 * cpus
+sub x8, x8, #1 ; clz x8, x8 ; neg x8, x8 ; lsl x2, x21, x8  ; roundup_pow_of_two
+str x2, [x19,#0xe40] ; futex_hashsize
 ```
-配合"从 key+0 哈希 4 个 u32"，它实际算的是 `jhash2([mm_lo, mm_hi, addr_lo, addr_hi], ...)`，
-而内核算的是 `jhash2([addr_lo, addr_hi, mm_lo, mm_hi], ...)`。jhash2 对输入顺序敏感
-（单元测试已验证），所以**用户态哈希 ≠ 内核哈希**。
+→ **hashsize = roundup_pow_of_two(256 × num_possible_cpus())，与上游一致。**
+设备实测佐证：真机日志 `hashsize=0x800 (cpus=8)`，`roundup_pow2(2048)=2048=0x800` ✓。
 
-**这极可能就是设备端 `KernelSnitch mm_struct leak failed` 的真正根因**：
-- 碰撞发现阶段用**时序侧信道测量真实内核**，所以能找到碰撞（与用户态哈希无关）；
-- 但暴力反推阶段用**错误的用户态哈希**去匹配观测到的碰撞模式，
-  于是找到错误的 mm（或找不到）→ 泄漏失败。
+### 8.2 结论：vivo ≠ 上游 v4.19
+
+| | 上游 Linux v4.19 | **vivo 4.19.152-perf+（反汇编实测）** |
+|---|---|---|
+| private 布局 | address@0, mm@8 | **mm@0, address@8**（旧 mainline 布局）|
+| 哈希字顺序 | [addr_lo,addr_hi,mm_lo,mm_hi] | **[mm_lo,mm_hi,addr_lo,addr_hi]** |
+| 哈希基址/长度 | key+0 / 4 u32 | key+0 / 4 u32 |
+| initval | offset@16 | offset@16 |
+| hashsize | roundup_pow2(256×cpus) | 同 |
+| 依赖 mm | 是 | **是** |
+
+vivo 保留/回退了 **2018 年前的旧 `futex_key` 布局**（mm 在前）。因此**任何以上游 v4.19
+`futex.h` 为准的用户态模型在本机都是错的**——这正是 v3 分支的错误。
 
 ### 8.3 修复（`exploit/src/kernelsnitch/futex_hash.h`）
 
-1. **typedef 改为与内核一致**：`word/address@0, ptr/mm@8, offset@16`。
-2. **加 `_Static_assert`** 钉死全部字段偏移与 `sizeof==24`，任何回归都会编译失败：
-   ```c
-   _Static_assert(offsetof(futex_key_t, both.word)==0, ...);
-   _Static_assert(offsetof(futex_key_t, both.ptr)==8, ...);
-   _Static_assert(offsetof(futex_key_t, private.mm)==8, ...);
-   ```
-3. `futex_hash_no_trunc()` 用 `&key->both.word`（修正后即 key+0）起、4 个 u32。
-4. `futex_hash()` 用 `memset` 清零（等价内核 `FUTEX_KEY_INIT`），消除 padding 不确定性。
-5. 修正 `FUTEX_KEY_INIT` 宏（原引用不存在的 `union futex_key` 类型，从未编译通过）。
+1. typedef 用 **vivo 布局**：`private.mm@0, private.address@8, offset@16`（即原始 K40 布局）。
+2. `_Static_assert` 钉死：`private.mm==0`、`private.address==8`、`both.offset==16`、`sizeof==24`。
+3. `futex_hash_no_trunc()` 从 `(u32*)key`（=key+0）哈希 `offsetof(both.offset)/4 = 4` 个 u32，
+   initval=`both.offset`。注释明确标注"目标是 vivo 旧布局，勿按上游改回"。
+4. `futex_hash()` 保留 `memset` 清零（确定性 padding）。
+5. `futex_hash_mm_dependent()` 探针保留（vivo 上返回 1，因哈希含 mm）。
 
-### 8.4 单元测试（独立参考实现，`make test`，主机 gcc，不触发漏洞）
+### 8.4 单元测试（`make test`，主机 gcc，独立参考，不触发漏洞）— 16/16 PASS
 
-**关键：测试用的参考结构体直接从内核头文件转录，绝不复制 exploit 的 typedef**
-（上一版正是"用错误参考验证错误代码"才得出错误结论）。结果 18/18 PASS：
+**关键：参考哈希 `ref_hash_target()` 直接按反汇编字顺序 [mm,addr] 构造 4 个 u32，
+不复制 exploit 的 struct**，杜绝"错验错"。并额外断言 target 顺序 ≠ upstream 顺序：
 ```
-[PASS] exploit futex_key_t layout == kernel reference (word@0/ptr@8/offset@16)
-[PASS] full 32-bit hash matches reference for all cases  (7/7)
-[PASS] futex_hash() wrapper bucket == reference bucket
-[PASS] reference hash differs for different mm (mm IS hashed)
-[PASS] exploit hash differs for different mm
-[PASS] legacy reversed layout does NOT match kernel (bug was real)
-[PASS] jhash2 is order-sensitive (why field order matters)
-[PASS] probe reports mm-DEPENDENT hash
+[PASS] futex_key_t layout == disassembled target (mm@0/addr@8)
+[PASS] full hash matches disassembly reference  (7/7)
+[PASS] reference/exploit hash differs for different mm (mm IS hashed)
+[PASS] jhash2 output depends on word order
+[PASS] target [mm,addr] differs from upstream [addr,mm]
+[PASS] exploit matches TARGET order (not upstream)
+[PASS] every KernelSnitch state maps to correct non-NULL name (6/6)
 ```
 
-### 8.5 对 KernelSnitch 可行性的重新评价（诚实版）
+> **"通过上游算法单测" ≠ "通过 vivo 目标验证"**：v3 分支曾"通过"对照上游的单测，
+> 但对 vivo 是错的。本版的参考直接来自 **vivo 反汇编**，所以 16/16 通过才真正意味着
+> 用户态模型与**目标内核**一致（而非与上游一致）。
 
-修复后，用户态哈希与内核 v4.19 `hash_futex()` **逐位一致**，且**依赖 mm**。
-因此 KernelSnitch 的 mm 定位**在原理上重新成立**——之前判定"方法论失效"是基于
-反转参考的错误结论，现予以推翻。
+### 8.5 KernelSnitch 可行性（诚实评估）
 
-**但"哈希依赖 mm"只是必要条件，绝不等于定位一定成功。** 仍需同时满足：
-1. **正确的 `mm_struct` 大小**：已修正为 0x3C0（960，设备 slabinfo 实测），
-   旧值 0x340 会让候选步长错误。
-2. **正确的 slab order/几何**：order 3（8 页/slab，34 obj/slab），已修正 `util.c`
-   重试逻辑（原本错误地把 `mm_slab_order` 重置为 0）。
-3. **准确的 identity-map 扫描区间**：依赖 `DIRECT_MAP_BASE/END` 与实测 RAM（12GB）。
-4. **足够低的时序噪声**：碰撞测量受调度干扰，vivo 的 SLUB_MIRROR 等加固可能影响。
-5. **vivo 未修改 `hash_futex()`**：**这是未验证假设**。我对照的是上游 v4.19，
-   尚未反汇编 PD2055 boot.img 内的实际 `hash_futex()` 确认 vivo 没有改动。
+用户态哈希现与 **vivo 目标内核** 逐位一致（反汇编 + 独立单测双重佐证），且依赖 mm，
+故 mm 定位**在原理上成立**。但"依赖 mm"仅是必要条件，成功还需：
+1. `mm_struct` 大小 = 0x3C0（已修正，设备 slabinfo 实测 960）；
+2. slab order=3、34 obj/slab（已修正 util.c 的 mm_slab_order 重置 bug）；
+3. 准确的 identity-map 扫描区间（DIRECT_MAP_BASE/END + 实测 12GB RAM）；
+4. 足够低的时序噪声（vivo SLUB_MIRROR 加固可能干扰）。
 
-我保留了一个**健全性门控** `futex_hash_mm_dependent()`：若某内核上哈希**不**依赖 mm
-（说明布局回归或内核改了哈希），`kernelsnitch_bruteforce()` 会拒绝运行并报错，
-避免返回假阳性地址。在正确的 4.19 布局下该门控通过（探针返回 1）。
+健全性门控 `futex_hash_mm_dependent()` 保留：若哈希不依赖 mm（布局回归）则拒绝定位，
+避免假阳性。**设备端尚未用本版重测**——这是下一轮首要验证项。
 
-**当前状态：设备端尚未用修复版重测。** 上一轮设备失败的一个**已确认根因**
-（typedef 反转导致哈希不匹配）已消除，但是否能成功定位 mm 仍需真机验证。
-
-### 8.6 slabinfo 补充数据（设备实测，已验证）
+### 8.6 slabinfo（设备实测）
 ```
-mm_struct: objsize=960 (0x3C0), 34 objects/slab, 8 pages/slab → order 3
-vivo 额外引入 kmalloc-rcl-*（reclaim）缓存类型
+mm_struct: objsize=960 (0x3C0), 34 obj/slab, 8 pages/slab → order 3
+vivo 额外引入 kmalloc-rcl-*（reclaim）缓存
 ```
 
 ---
@@ -456,18 +464,25 @@ vivo 额外引入 kmalloc-rcl-*（reclaim）缓存类型
 
 | 文件 | 说明 |
 |------|------|
-| `exploit/src/targets/pd2055-4.19.152-perf/target.h` | PD2055 完整偏移表（已修正，markers 验证） |
-| `kallsyms.txt` | 完整内核符号表（**109,687** 条目，已验证） |
+| `analysis/futex_disassembly_report.md` | **本轮核心**：vivo futex 反汇编验证报告（含 ARM64 证据）|
+| `exploit/src/targets/pd2055-4.19.152-perf/target.h` | PD2055 完整偏移表（已修正，markers 验证）|
+| `exploit/src/kernelsnitch/futex_hash.h` | 用户态 futex 哈希（vivo 布局 mm@0，_Static_assert 钉死）|
+| `kallsyms.txt` | 完整内核符号表（**109,687** 条目，已验证）|
 | `target_offsets.txt` | target.h 的格式化偏移值 |
 | `boot.img` (96MB) | 从固件包提取的内核镜像，供社区分析 |
-| `xbl_config.elf` | XBL 配置（物理加载地址推导） |
-| `exploit/` | 修改后的 GhostLock exploit 源码（含修正的 futex_hash.h） |
-| `exploit/src/diag_params.c` | **只读**参数诊断组件（不触发漏洞） |
-| `exploit/tests/test_futex_hash.c` | futex 哈希单元测试（主机可跑，16 项） |
-| `exploit/Makefile` | 可复现构建（默认 PD2055，含 `test`/`diag`/`diag-payload`） |
-| `scripts/` | 全部分析脚本（kallsyms 解析器、OTA 解密器等） |
+| `xbl_config.elf` | XBL 配置（物理加载地址推导）|
+| `exploit/src/diag_params.c` | **只读**参数诊断组件（不触发漏洞）|
+| `exploit/tests/test_futex_hash.c` | futex 哈希+状态表单测（主机可跑，16 项，独立参考）|
+| `exploit/Makefile` | 可复现构建（默认 PD2055，含 `test`/`diag`/`noroot-payload`）|
+| `scripts/extract_boot_image.py` | boot.img → ARM64 Image（v2 头解析，CLI）|
+| `scripts/parse_kallsyms.py` | 解析 kallsyms（运行时 markers 429/429 自校验）|
+| `scripts/verify_kallsyms.py` | 6 重独立只读校验 |
+| `scripts/disasm_futex.py` | 反汇编 futex 函数（复现报告证据）|
+| `scripts/gen_target_offsets.py` | 从 kallsyms 生成 target.h 偏移 |
+| `scripts/kallsyms_layout.json` | 经验证的结构偏移常量（markers 自校验）|
+| `scripts/legacy/` | 历史发现/破解脚本（已被上述取代，见其 README）|
 | `tools/vivo_ota.py` | 独立的 vivo OTA 协议解密/查询/下载工具 |
-| `analysis/` | 解密后的 OTA 响应、字母表、slabinfo |
+| `analysis/` | 反汇编报告、解密 OTA 响应、字母表、slabinfo |
 | `logs/` | 设备上的 exploit 执行日志 |
 
 ---
@@ -617,53 +632,63 @@ androidboot.securebootkeyver = 4 ; secureboot_enable = 1
 
 ## 14. 验证与验收（真实结果，未伪造）
 
+> 区分两类验证：**[上游]** = 对照 Linux v4.19 源码/算法；**[vivo]** = 对照 PD2055
+> 目标内核反汇编。二者结论不同（vivo 用旧布局），不可混为一谈。
+
 | 测试项 | 命令 | 结果 |
 |--------|------|------|
-| futex_key_t 布局 == 内核参考 | `make test` | **PASS**（word@0/ptr@8/offset@16, sizeof 24） |
-| futex 哈希 vs **独立**内核参考 | `make test` | **PASS 7/7**（逐位一致） |
-| 哈希依赖 mm | `make test` | **PASS**（不同 mm → 不同哈希） |
-| 旧反转布局确实错误 | `make test` | **PASS**（复现 bug，与内核不符） |
-| mm-dependency 探针 | `make test` | **PASS**（返回 1） |
-| mm_struct slab 算术 | `make test` | **PASS**（0x3C0→34 obj/slab） |
-| 单元测试合计 | `make test` | **18/18 PASS** + diag 4/4(2 skip) |
-| kallsyms markers 交叉验证 | `scripts/reverify_kallsyms.py` | **PASS 429/429** |
-| kallsyms 计数一致 | 同上 | **PASS**（offsets==names==num_syms=109687） |
-| kallsyms 段序(text<rodata<data<bss) | 同上 | **PASS**（独立证明配对正确） |
-| kallsyms 同源符号聚簇 | 同上 | **PASS**（ashmem/cred/configfs 各<2.6KB） |
-| kallsyms ARM64 代码抽查 | 同上 | **PASS 10/10**（text 符号指向真实指令） |
-| aarch64 FULL payload 构建 | `make preload` | **PASS** sha256 79ecfc01… |
-| aarch64 NOROOT payload 构建 | `make noroot-payload` | **PASS** sha256 ef5d9178… |
-| aarch64 diag_params 构建 | `make diag` | **PASS** sha256 f21aed7d… |
-| noroot 版排除最终提权代码 | strings 对比 | **PASS**（su/wallpaper 路径 absent） |
-| 设备端 diag_params 运行 | 需真机 | **NOT TESTED**（本轮不在真机运行） |
-| 设备端 KernelSnitch（修复版） | 需真机 | **NOT TESTED**（关键待验证项） |
+| boot.img 提取（v2 头 + Image 定位） | `extract_boot_image.py` | **PASS**（50,759,696 B，wrapper=0，_text@0）|
+| **[vivo]** get_futex_key → key 布局 mm@0/addr@8 | `disasm_futex.py` | **PASS**（stp x23=mm,x21=addr）|
+| **[vivo]** task_struct.mm@0x580 | `disasm_futex.py`(get_task_mm) | **PASS**（ldr [x21,#0x580]）|
+| **[vivo]** hash_futex 长度=4/基址=key+0/种子 | `disasm_futex.py --scan-hash` | **PASS**（12 处 0xdeadbeff）|
+| **[vivo]** hashsize=roundup_pow2(256×cpus) | `disasm_futex.py`(futex_init) | **PASS**（lsl#8;clz;neg;lsl）|
+| futex_key_t 布局 == **[vivo]** 反汇编 | `make test` | **PASS**（mm@0/addr@8/offset@16）|
+| futex 哈希 == **[vivo]** 反汇编字顺序参考 | `make test` | **PASS 7/7**（[mm,addr] 逐位一致）|
+| target[mm,addr] ≠ upstream[addr,mm] | `make test` | **PASS**（证明 vivo≠上游）|
+| 哈希依赖 mm | `make test` | **PASS** |
+| KernelSnitch 状态名映射（6/6 非空） | `make test` | **PASS**（修复缺项）|
+| 单元测试合计 | `make test` | **16/16 PASS** + diag 4/4(2 skip) |
+| kallsyms 6 重校验（从 boot.img） | `verify_kallsyms.py --from-boot` | **PASS 9/9**（markers 429/429 等）|
+| kallsyms 解析可复现（字节级一致） | `parse_kallsyms.py --from-boot` | **PASS**（== 提交的 kallsyms.txt）|
+| aarch64 FULL payload | `make preload` | **PASS** sha256 712d1fd1… |
+| aarch64 NOROOT payload | `make noroot-payload` | **PASS** sha256 df314690… |
+| aarch64 diag_params | `make diag` | **PASS** sha256 3ca59b8b… |
+| noroot 版排除最终提权代码 | strings 对比 | **PASS**（su/wallpaper absent）|
+| 设备端 diag_params 运行 | 需真机 | **NOT TESTED**（本轮禁止真机触发）|
+| 设备端 KernelSnitch（本版） | 需真机 | **NOT TESTED**（关键待验证项）|
 | 完整提权（uid=0） | 需真机 | **NOT TESTED / 未达成** |
 
-诚实声明：**尚未在任何真机上取得 uid=0，也尚未用修复版在真机重测 KernelSnitch。**
-本轮修复消除了一个**已确认**的失败根因（typedef 反转导致用户态哈希≠内核哈希），
-但能否成功定位 mm 仍需真机验证（依赖 §8.5 列出的其余条件）。
+诚实声明：**尚未在任何真机取得 uid=0，也尚未用本版在真机重测 KernelSnitch。**
+本轮把用户态 futex 模型与 **vivo 目标内核反汇编**对齐（此前 v3 误对齐到上游），
+并修复了 mm 尺寸/slab order/状态名等参数 bug；能否成功定位 mm 仍需真机验证。
 
 ---
 
 ## 15. 已验证结论 vs 仍是假设
 
-**已通过代码/固件验证（主机或静态）：**
+**已通过 [vivo] 目标内核反汇编验证（本轮新增，最强证据）：**
+- `futex_key` 布局 = **mm@0, address@8, offset@16**（get_futex_key stp + get_task_mm 交叉验证）
+- `hash_futex` = jhash2(**[mm_lo,mm_hi,addr_lo,addr_hi]**, initval=offset)，基址 key+0，长度 4
+  （futex_wake + 第二调用者 + 12 处 0xdeadbeff 种子三重印证）
+- `futex_hashsize` = roundup_pow_of_two(256×num_possible_cpus())（futex_init）
+- task_struct.mm 偏移 = 0x580（get_task_mm）
+- **vivo ≠ 上游 v4.19**：vivo 用旧 mainline 布局（mm 在前）
+
+**已通过静态/主机验证：**
 - kallsyms 结构与全部符号偏移：6 重独立验证（计数/markers 429/429/段序/聚簇/ARM64 抽查/数组逐字节）
 - vivo 过滤了 commit_creds/prepare_kernel_cred/init_cred/kernel_init/init_task 等符号
-- `union futex_key` 布局 = word@0/ptr@8/offset@16（对照 v4.19 官方头文件 + `_Static_assert`）
-- 修复后用户态 futex 哈希与**独立转录的内核参考**逐位一致，且依赖 mm（18/18 单测）
-- 旧反转布局确实与内核不符（bug 真实存在，已复现）
+- 用户态 futex 哈希与 **vivo 反汇编参考** 逐位一致（16/16 单测）
 - mm_struct=960B/order3、三个 aarch64 构建产物 SHA256、noroot 版排除最终提权代码
 
-**仍是假设（需真机或反汇编确认，未验证）：**
-- **vivo 4.19.152-perf+ 未修改 `hash_futex()`**：我对照的是上游 v4.19，
-  **尚未反汇编 PD2055 boot.img 内的实际 `hash_futex()`**。若 vivo 改过，单测结论不适用。
-- `KIMAGE_TEXT_BASE=0xffffff8008080000`：KASLR 运行时才定，沿用 K40 同族假设。
-- task_struct/cred/pipe 等**结构体字段偏移**：与 K40 4.19 参考逐项一致，但未从本机
-  DWARF 证实。设备 `CONFIG_IKHEADERS=y`，下一轮可从 Image 提取头文件精确验证。
+**仍是假设（需真机确认，未验证）：**
+- `KIMAGE_TEXT_BASE=0xffffff8008080000`：KASLR 运行时才定（反汇编给的是相对量，不受影响，
+  但绝对基址仍需运行时 slide 泄露确认）。
+- task_struct/cred/pipe 的**其余结构体字段偏移**：与 K40 4.19 参考逐项一致，且 mm@0x580 已被
+  反汇编证实，但 cred/pipe 等字段未逐一从本机 DWARF/反汇编证实（设备 `CONFIG_IKHEADERS=y`，
+  下一轮可提取头文件精确验证）。
 - `SLIDE_RANDOM_BOOT_ID_DATA`：被过滤的静态符号，暂等于 sysctl_bootid，需运行时确认。
-- **KernelSnitch 在修复版下能否真机定位 mm**：原理成立，但受 mm 尺寸/slab/扫描区间/
-  时序噪声/vivo 加固（SLUB_MIRROR）影响，未验证。
+- **KernelSnitch 在本版下能否真机定位 mm**：原理成立（哈希已与目标内核对齐），但受 mm 尺寸/
+  slab/扫描区间/时序噪声/vivo SLUB_MIRROR 加固影响，未验证。
 
 ---
 
@@ -685,12 +710,13 @@ adb shell "cat /sys/devices/system/cpu/possible"
 # 4. 确认内核版本 / KASLR / 关键 config
 adb shell "uname -a; zcat /proc/config.gz | grep -E 'IKHEADERS|KALLSYMS|SLUB_MIRROR|FUTEX'"
 
-# 5. 提取 kheaders（CONFIG_IKHEADERS=y）以精确验证结构体偏移
+# 5. 提取 kheaders（CONFIG_IKHEADERS=y）以精确验证 cred/pipe 等结构体偏移
 adb shell "cat /sys/kernel/kheaders.tar.xz" > kheaders.tar.xz   # 若存在
 
-# 6. 反汇编验证 vivo 是否改过 hash_futex()（消除 §15 的关键假设）
-#    从 boot.img 提取 kernel Image 后，定位 hash_futex 并反汇编，
-#    确认 jhash2 的输入起点/长度与上游一致。这是下一轮的首要静态任务。
+# 6. 【已完成·离线】反汇编验证 vivo futex 实现（无需真机，类别 B 安全）
+#    本轮已用 scripts/disasm_futex.py 完成，结论见 analysis/futex_disassembly_report.md：
+#    vivo = mm@0/[mm,addr]/长度4/hashsize=roundup_pow2(256*cpus)。任何人可离线复现：
+python3 scripts/disasm_futex.py --from-boot boot.img --kallsyms kallsyms.txt --scan-hash
 ```
 
 > ⚠️ **本仓库不提供"自动在真机运行 exploit"的指令。** 类别 C 的 `preload.so` /

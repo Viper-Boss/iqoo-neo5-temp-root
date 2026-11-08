@@ -1,6 +1,6 @@
 import struct
 
-d = open(r"Q:\Deepseek\_neo5\firmware\kernel_Image", "rb").read()
+d = open(r"../../kernel_Image", "rb").read()
 
 OFFS_S = 0x1f805bc
 OFFS_N = 109691
@@ -85,7 +85,7 @@ if hits:
     viol = sum(1 for i in range(OFFS_N-1) if offs[i] > offs[i+1])
     print(f"  offsets monotonic violations: {viol}")
     # write dump
-    with open(r"Q:\Deepseek\_neo5\firmware\kallsyms_fixed.txt", "w") as f:
+    with open(r"../../kallsyms_fixed.txt", "w") as f:
         for o, n in zip(offs, names):
             f.write(f"{o:08x} {n.decode('latin-1')}\n")
     print("  saved kallsyms_fixed.txt")

@@ -1,7 +1,7 @@
 import json
 
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
-m = json.load(open(r'Q:\Deepseek\_neo5\br\alphabet_cpsat.json'))
+param = open(r'samples/request_param.txt','r').read().strip()
+m = json.load(open(r'samples/alphabet_cpsat.json'))
 
 def encode(m, plaintext):
     inv = {v: ch for ch, v in m.items()}
@@ -85,12 +85,12 @@ print(f'\nfinal: {matching}/{len(param)} chars match ({matching/len(param)*100:.
 pt = decode(m, param)
 print('\n=== PARAM decoded (repaired) ===')
 print(pt.decode('latin-1'))
-json.dump(m, open(r'Q:\Deepseek\_neo5\br\alphabet_repaired.json','w'))
+json.dump(m, open(r'samples/alphabet_repaired.json','w'))
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
 ptc = decode(m, conf)
 print('\n=== CONF decoded (repaired) ===')
 print(ptc.decode('latin-1'))
-open(r'Q:\Deepseek\_neo5\br\conf_repaired.txt','wb').write(ptc)
+open(r'samples/conf_repaired.txt','wb').write(ptc)
 
 

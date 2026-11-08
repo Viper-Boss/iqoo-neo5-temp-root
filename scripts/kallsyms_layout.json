@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Verified kallsyms structure offsets for the PD2055_A_9.10.3 kernel Image,",
+    "as extracted by extract_boot_image.py (raw ARM64 Image, _text at file offset 0,",
+    "50,759,696 bytes). These are byte positions WITHIN THAT EXTRACTED IMAGE.",
+    "",
+    "NOTE: an earlier (incorrect) extraction dropped the first 52 bytes of the",
+    "kernel blob; the offsets here are for the CORRECT full Image. Symbol code",
+    "offsets in kallsyms.txt equal file offsets in this Image (verified by",
+    "disassembly: _text@0, get_futex_key@0x1407d8, get_task_mm@0x3ccd8).",
+    "",
+    "These constants are RE-VERIFIED at runtime by parse_kallsyms.py /",
+    "verify_kallsyms.py via the kallsyms_markers cross-check (all 429 markers",
+    "must match). If the image changes, the check fails loudly."
+  ],
+  "offsets_start": "0x1f80600",
+  "num_syms": 109687,
+  "num_syms_addr": "0x1feb900",
+  "names_start": "0x1feba00",
+  "names_end": "0x2159082",
+  "markers": "0x2159100",
+  "markers_count": 429,
+  "markers_stride": 8,
+  "token_table": "0x2159f00",
+  "token_index": "0x215a300",
+  "text_file_offset": 0,
+  "image_size": 50759696
+}

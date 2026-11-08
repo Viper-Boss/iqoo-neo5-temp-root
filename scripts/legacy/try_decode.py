@@ -1,6 +1,6 @@
 import base64, binascii, sys
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
 print('conf len:', len(conf))
 
 # hypothesis 1: strip '-' and '_' then standard base64

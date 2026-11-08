@@ -1,8 +1,8 @@
 import json, random
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
-m0 = json.load(open(r'Q:\Deepseek\_neo5\br\alphabet_victory.json'))
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+param = open(r'samples/request_param.txt','r').read().strip()
+m0 = json.load(open(r'samples/alphabet_victory.json'))
 TRUE_HASH = b'<REDACTED_IMEI_HASH>'
 syms = sorted(set(conf) | set(param))
 
@@ -88,5 +88,5 @@ i0 = pt.find(b'fileName=%40')
 i1 = pt.find(b'&', i0) if i0 > 0 else -1
 print('\n>>> FILENAME:', pt[i0+11:i1].decode('latin-1'))
 print('>>> FULL URL:', pt[pt.find(b'http'):i1].decode('latin-1'))
-open(r'Q:\Deepseek\_neo5\br\conf_done.txt','wb').write(pt)
-json.dump(m, open(r'Q:\Deepseek\_neo5\br\alphabet_done.json','w'))
+open(r'samples/conf_done.txt','wb').write(pt)
+json.dump(m, open(r'samples/alphabet_done.json','w'))

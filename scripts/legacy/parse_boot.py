@@ -1,5 +1,5 @@
 import struct
-img = open(r"Q:\Deepseek\_neo5\firmware\boot.img", "rb").read()
+img = open(r"../../boot.img", "rb").read()
 print("magic:", img[:8])
 kernel_size = struct.unpack("<I", img[8:12])[0]
 kernel_addr = struct.unpack("<I", img[12:16])[0]
@@ -19,10 +19,10 @@ print("kernel magic ascii:", kernel[:4])
 # arm64 Image header: branch instruction (0x140000xx) + "ARM\x64" at offset 4
 if kernel[4:8] == b"ARM\x64":
     print("=> RAW ARM64 KERNEL IMAGE")
-    open(r"Q:\Deepseek\_neo5\firmware\kernel_Image", "wb").write(kernel)
+    open(r"../../kernel_Image", "wb").write(kernel)
 elif kernel[:2] == b"\x1f\x8b":
     print("=> GZIP COMPRESSED KERNEL")
-    open(r"Q:\Deepseek\_neo5\firmware\kernel_gz", "wb").write(kernel)
+    open(r"../../kernel_gz", "wb").write(kernel)
 else:
     print("=> unknown format, saving raw")
-    open(r"Q:\Deepseek\_neo5\firmware\kernel_raw", "wb").write(kernel)
+    open(r"../../kernel_raw", "wb").write(kernel)
