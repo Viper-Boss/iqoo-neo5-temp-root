@@ -1,0 +1,46 @@
+/* init_task: NOT FOUND */
+#define INIT_UTS_NS_OFF 0x02d9e688ULL  /* kallsyms: init_uts_ns */
+#define EMPTY_ZERO_PAGE_OFF 0x030433d8ULL  /* kallsyms: empty_zero_page */
+#define ROOT_TASK_GROUP_OFF 0x0306dbaaULL  /* kallsyms: root_task_group */
+#define SELINUX_STATE_OFF 0x024cdc60ULL  /* kallsyms: selinux_state */
+#define SECURITY_HOOK_HEADS_OFF 0x024cdc58ULL  /* kallsyms: security_hook_heads */
+#define KMALLOC_CACHES_OFF 0x024c4fecULL  /* kallsyms: kmalloc_caches */
+#define ANON_PIPE_BUF_OPS_OFF 0x01cf8de0ULL  /* kallsyms: anon_pipe_buf_ops */
+#define NFULNL_LOGGER_OFF 0x02d948d0ULL  /* kallsyms: nfulnl_logger */
+#define SYSCTL_BOOTID_OFF 0x033dc67cULL  /* kallsyms: sysctl_bootid */
+#define ASHMEM_FOPS_OFF 0x01e6f680ULL  /* kallsyms: ashmem_fops */
+#define ASHMEM_MISC_OFF 0x02f458b8ULL  /* kallsyms: ashmem_misc */
+#define ASHMEM_IOCTL_OFF 0x00dba668ULL  /* kallsyms: ashmem_ioctl */
+#define COMPAT_ASHMEM_IOCTL_OFF 0x00dba6d0ULL  /* kallsyms: compat_ashmem_ioctl */
+#define ASHMEM_MMAP_OFF 0x00dba858ULL  /* kallsyms: ashmem_mmap */
+#define ASHMEM_OPEN_OFF 0x00dbab10ULL  /* kallsyms: ashmem_open */
+#define ASHMEM_RELEASE_OFF 0x00dbab98ULL  /* kallsyms: ashmem_release */
+#define ASHMEM_SHOW_FDINFO_OFF 0x00dbabc8ULL  /* kallsyms: ashmem_show_fdinfo */
+#define CONFIGFS_READ_FILE_OFF 0x0033ae18ULL  /* kallsyms: configfs_read_file */
+#define CONFIGFS_WRITE_BIN_FILE_OFF 0x0033b160ULL  /* kallsyms: configfs_write_bin_file */
+#define GENERIC_FILE_SPLICE_READ_OFF 0x002c53c0ULL  /* kallsyms: generic_file_splice_read */
+#define NOOP_LLSEEK_OFF 0x00282a40ULL  /* kallsyms: noop_llseek */
+#define REMOVE_WAITER_OFF 0x000d4198ULL  /* kallsyms: remove_waiter */
+#define KALLSYMS_LOOKUP_NAME_OFF 0x001468b0ULL  /* kallsyms: kallsyms_lookup_name */
+/* _stext: NOT FOUND */
+/* _text: NOT FOUND */
+/* commit_creds: NOT FOUND */
+/* prepare_kernel_cred: NOT FOUND */
+#define MODPROBE_PATH_OFF 0x02db28e8ULL  /* kallsyms: modprobe_path */
+#define LOGGERS_OFF 0x02d948c0ULL  /* kallsyms: loggers */
+/* selinux_enforcing: NOT FOUND */
+#define PANIC_OFF 0x0003bbe8ULL  /* kallsyms: panic */
+#define PRINTK_OFF 0x000dd888ULL  /* kallsyms: printk */
+/* stack_chk_guard: NOT FOUND */
+/* init_cred: NOT FOUND */
+#define INIT_NSPROXY_OFF 0x02db2338ULL  /* kallsyms: init_nsproxy */
+#define INIT_FS_OFF 0x02e24ab8ULL  /* kallsyms: init_fs */
+#define INIT_FILES_OFF 0x02e23888ULL  /* kallsyms: init_files */
+/* selinux_enforcing: NOT FOUND */
+#define KMALLOC_CACHES_OFF 0x024c4fecULL  /* kallsyms: kmalloc_caches */
+#define FUTEX_REQUEUE_OFF 0x00136948ULL  /* kallsyms: futex_requeue */
+#define RT_MUTEX_START_PROXY_LOCK_OFF 0x000d3fe8ULL  /* kallsyms: rt_mutex_start_proxy_lock */
+/* task_struct: NOT FOUND */
+/* mm_struct: NOT FOUND */
+/* vfsmount: NOT FOUND */
+/* file_operations: NOT FOUND */
