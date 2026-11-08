@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 *.zip
+
+# build artifacts
+exploit/build/
+build/
