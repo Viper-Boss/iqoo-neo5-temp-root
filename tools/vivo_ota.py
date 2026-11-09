@@ -221,7 +221,8 @@ def verify_roundtrip(encrypted: str, alphabet: dict = None) -> bool:
 # ============================================================
 
 def build_request(model: str, device: str, version: str,
-                  imei: str = "0" * 64) -> str:
+                  imei: str = "0" * 64,
+                  emmcid: str = "0" * 50) -> str:
     """
     构造 OTA 查询请求的明文参数。
     
@@ -230,6 +231,8 @@ def build_request(model: str, device: str, version: str,
         device:  公开型号 (如 "V2055A") 
         version: 固件版本 (如 "9.10.3")
         imei:    IMEI 哈希 (EOL 设备通常可以用全零)
+        emmcid:  存储 ID (设备标识, 已脱敏; 默认全零占位。服务器是否校验
+                 此字段未验证 — EOL 机型查询通常不需要真实值)
     
     返回:
         明文请求字符串（需加密后发送）
@@ -243,7 +246,7 @@ def build_request(model: str, device: str, version: str,
         f"oem={model}D_CN-ZH_FULL_SC_NULL&"
         f"sdkVersion=34&"
         f"imei={imei}&"
-        f"emmcid=<REDACTED_EMMCID>&"
+        f"emmcid={emmcid}&"
         f"oemVersion=N&custom=N&gn=0&"
         f"oemProjects={model}+{model}B+{model}C,{model}D+{model}E+{model}F,{model}G&"
         f"vgcCu=NULL&hasVgc=0&countryRegion=CN-ZH&vgcSwVer=null&"
@@ -253,7 +256,8 @@ def build_request(model: str, device: str, version: str,
     return request
 
 
-def query_ota(model: str, device: str, version: str) -> dict:
+def query_ota(model: str, device: str, version: str,
+              imei: str = "0" * 64, emmcid: str = "0" * 50) -> dict:
     """
     向 vivo OTA 服务器查询固件下载 URL。
     
@@ -267,7 +271,7 @@ def query_ota(model: str, device: str, version: str) -> dict:
     适用于所有使用 jvq 1.0.3 协议的 vivo/iQOO 设备。
     """
     # 构造并加密请求
-    plaintext = build_request(model, device, version)
+    plaintext = build_request(model, device, version, imei=imei, emmcid=emmcid)
     encrypted = encode(plaintext.encode())
     
     # 发送 POST 请求
@@ -429,7 +433,12 @@ VERIFIED_URLS = {
     "PD2055_A_9.10.3 (iQOO Neo5, final EOL)": {
         "url": "http://sysupgrade.vivo.com.cn/dapi2.do?fileName=%40a160970%3D1Wb74zZnMyZkEQMylyN9YS0gMdN46HMkYHYggQN4FiZ9USMPFQM8DyMwZSN8FSMz1XN90",
         "size": "7,039,074,100 bytes (6.56 GB)",
-        "sha256": "<REDACTED_EMMCID> (server-reported)",
+        # NOTE: the response's "up.emmcid" field was earlier mistaken for a
+        # firmware SHA256; it is a device identifier and has been redacted.
+        # The zip's integrity was verified structurally (317 entries, boot.img
+        # 100,663,296 B matching the boot header). No official firmware hash
+        # was published by the server (checkString was empty).
+        "integrity": "structure-verified (317 zip entries; boot.img size matches header)",
         "kernel": "4.19.152-perf+",
         "android": "14 (OriginOS 4)",
     },
@@ -506,16 +515,20 @@ def main():
     
     elif cmd == "query":
         if len(sys.argv) < 5:
-            print("用法: query <model> <device> <version>")
-            print("  model:   PD代号 (如 PD2055)")
-            print("  device:  V型号 (如 V2055A)")
-            print("  version: 固件版本 (如 9.10.3)")
+            print("用法: query <model> <device> <version> [imei_hash] [emmcid]")
+            print("  model:      PD代号 (如 PD2055)")
+            print("  device:     V型号 (如 V2055A)")
+            print("  version:    固件版本 (如 9.10.3)")
+            print("  imei_hash:  可选, 64位十六进制 (默认全零; EOL 机型通常可用)")
+            print("  emmcid:     可选, 50位十六进制 (默认全零; 服务器是否校验未验证)")
             print("\n查已知机型: python3 vivo_ota.py list")
             sys.exit(1)
         model, device, version = sys.argv[2], sys.argv[3], sys.argv[4]
+        imei = sys.argv[5] if len(sys.argv) > 5 else "0" * 64
+        emmcid = sys.argv[6] if len(sys.argv) > 6 else "0" * 50
         print(f"[*] 查询: {model} / {device} / {version}")
         print(f"[*] 服务器: https://sysupgrade.vivo.com.cn/api2\n")
-        result = query_ota(model, device, version)
+        result = query_ota(model, device, version, imei=imei, emmcid=emmcid)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         if 'url' in result:
             print(f"\n[+] 下载URL: {result['url']}")

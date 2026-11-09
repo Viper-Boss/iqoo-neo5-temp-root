@@ -22,9 +22,27 @@ Usage:
 License: GPLv3
 """
 import sys, os, argparse
-from capstone import Cs, CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# capstone is imported lazily inside main() so that --help works even when the
+# optional disassembly dependency is not installed.
+Cs = None
+CS_ARCH_ARM64 = None
+CS_MODE_LITTLE_ENDIAN = None
+
+
+def import_capstone():
+    """Import capstone, exiting with a clear message if it is missing."""
+    global Cs, CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN
+    try:
+        from capstone import Cs as _Cs, CS_ARCH_ARM64 as _A, CS_MODE_LITTLE_ENDIAN as _M
+    except ImportError:
+        print("ERROR: the 'capstone' module is required for disassembly.", file=sys.stderr)
+        print("       install it with:  pip install capstone", file=sys.stderr)
+        print("       (see requirements.txt)", file=sys.stderr)
+        sys.exit(2)
+    Cs, CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN = _Cs, _A, _M
 
 
 def load_kallsyms(path):
@@ -73,6 +91,7 @@ def main():
                     help="scan the futex region for all inlined hash_futex seed sites (0xdeadbeff)")
     args = ap.parse_args()
 
+    import_capstone()
     data = get_image(args)
     tab = load_kallsyms(args.kallsyms)
     md = Cs(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN)

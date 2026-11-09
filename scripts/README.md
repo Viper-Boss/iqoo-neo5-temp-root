@@ -32,7 +32,7 @@ python3 gen_target_offsets.py --kallsyms ../kallsyms.txt -o ../target_offsets.tx
 ### B) futex 实现静态验证（反汇编）
 
 ```bash
-# 复现 analysis/futex_disassembly_report.md 的全部证据
+# 复现 analysis/reports/futex_disassembly_report.md 的全部证据
 python3 disasm_futex.py --from-boot ../boot.img --kallsyms ../kallsyms.txt --scan-hash
 
 # 单独反汇编某符号
