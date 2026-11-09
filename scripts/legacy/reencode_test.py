@@ -1,10 +1,10 @@
 import json
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
-m = json.load(open(r'Q:\Deepseek\_neo5\br\alphabet_cpsat.json'))  # latest
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+param = open(r'samples/request_param.txt','r').read().strip()
+m = json.load(open(r'samples/alphabet_cpsat.json'))  # latest
 # also load victory map for comparison
-mv = json.load(open(r'Q:\Deepseek\_neo5\br\alphabet_victory.json'))
+mv = json.load(open(r'samples/alphabet_victory.json'))
 
 def decode(m, s):
     vals = [m.get(ch) for ch in s]

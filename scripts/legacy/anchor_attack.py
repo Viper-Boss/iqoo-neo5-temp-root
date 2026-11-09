@@ -1,7 +1,7 @@
 import sys
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+param = open(r'samples/request_param.txt','r').read().strip()
 
 def bitsof(b):
     return [(b >> i) & 1 for i in range(7, -1, -1)]

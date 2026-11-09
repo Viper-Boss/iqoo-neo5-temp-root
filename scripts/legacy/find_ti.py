@@ -1,5 +1,5 @@
 import struct
-data = open(r"Q:\Deepseek\_neo5\firmware\kernel_Image", "rb").read()
+data = open(r"../../kernel_Image", "rb").read()
 tt_start = 0x2159ecc
 tt_end = 0x215a259
 

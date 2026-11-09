@@ -1,7 +1,7 @@
 import json, random, re
 
-conf = open(r'Q:\Deepseek\_neo5\br\recovery\last_server_cJSON.conf','r',encoding='utf-8').read().strip()
-param = open(r'Q:\Deepseek\_neo5\br\request_param.txt','r').read().strip()
+conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()
+param = open(r'samples/request_param.txt','r').read().strip()
 syms = sorted(set(conf) | set(param))
 
 def bitsof(b):
@@ -161,6 +161,6 @@ print('\n--- CONF ---')
 print(pt.decode('utf-8', errors='replace'))
 print('\n--- PARAM ---')
 print(ptp.decode('utf-8', errors='replace'))
-open(r'Q:\Deepseek\_neo5\br\conf_final.txt','wb').write(pt)
-open(r'Q:\Deepseek\_neo5\br\param_final.txt','wb').write(ptp)
-json.dump(m, open(r'Q:\Deepseek\_neo5\br\alphabet_final.json','w'))
+open(r'samples/conf_final.txt','wb').write(pt)
+open(r'samples/param_final.txt','wb').write(ptp)
+json.dump(m, open(r'samples/alphabet_final.json','w'))

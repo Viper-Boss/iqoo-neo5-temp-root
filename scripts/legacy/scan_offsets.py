@@ -1,6 +1,6 @@
 import struct
 
-data = open(r"Q:\Deepseek\_neo5\firmware\kernel_Image", "rb").read()
+data = open(r"../../kernel_Image", "rb").read()
 
 # scan for long strictly-increasing s32 runs with small values
 # region: anywhere in the image before the names
