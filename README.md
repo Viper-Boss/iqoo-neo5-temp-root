@@ -1,8 +1,10 @@
 # iQOO Neo5（PD2055）临时 Root 研究项目
 
 > **⚠️ 诚实状态声明**：**尚未在真机取得 uid=0，也尚未解锁 Bootloader。**
-> 本项目是内核安全研究，当前处于「参数已修正、待真机复测」阶段。
+> 本项目是内核安全研究：独立普通 futex 实验已取得两轮一致的唯一 mm 候选，完整提权链仍需适配。
 > 请勿被任何"Root 成功 / BL 已解锁"描述误导。
+>
+> **最新调查**：[真机定位、错误结构体偏移与原厂 ABL 解锁门控](analysis/reports/device_validation_20261109.md)。
 
 ---
 
@@ -12,7 +14,7 @@
 内核 4.19.152-perf+）** 的临时 root 研究。核心思路：移植 CVE-2026-43499
 （rtmutex `remove_waiter()` UAF）的 GhostLock exploit，通过 LD_PRELOAD 实现内存态提权。
 
-本项目**不追求**持久化 Root 与 Bootloader 解锁（前者通常需解锁，后者已被 vivo 从 ABL 中删除）。
+本项目尚未实现持久化 Root 或 Bootloader 解锁。原厂 ABL 保留厂商专用解锁处理代码，存在签名/状态门控，不能由标准命令返回 unknown command 推导全部解锁代码已删除。
 
 ---
 
@@ -25,7 +27,7 @@
 | Android | 14 / OriginOS 4 |
 | 固件 | PD2055_A_9.10.3（compiler10161353，EOL 最终版）|
 | 内核 | 4.19.152-perf+（arm64，39-bit VA，KASLR）|
-| Bootloader | **Locked**（无解锁通道）|
+| Bootloader | **Locked**（尚无已验证的可用解锁方法）|
 
 ---
 
@@ -39,9 +41,9 @@
 | vivo futex 哈希模型 | ✅ **反汇编定论**（mm@0/[mm,addr]，≠上游 v4.19）|
 | 单元测试 | ✅ 完成（16/16，独立反汇编参考）|
 | 构建 | ✅ 完成（aarch64，NDK r27c）|
-| **KernelSnitch mm 定位** | ⏳ **未真机验证**（原理成立，参数已修）|
+| **KernelSnitch mm 定位** | ✅ 独立实验两轮各唯一匹配且候选一致；尚无独立内核读取地面真值 |
 | **临时 Root（uid=0）** | ❌ **未达成** |
-| **Bootloader 解锁** | ❌ **不可行**（命令被删）|
+| **Bootloader 解锁** | ❌ **未达成**（已发现厂商处理函数，校验/模式条件未解决）|
 
 ---
 
@@ -53,7 +55,8 @@
 - **ARM64 反汇编取证**：`scripts/disasm_futex.py`（复现 futex 报告全部证据）
 - **符号偏移自动生成**：`scripts/gen_target_offsets.py`
 - **futex 哈希独立单测**：`exploit/tests/test_futex_hash.c`（16 项）
-- **只读参数诊断**：`exploit/src/diag_params.c`（`make diag`，唯一可安全真机运行）
+- **只读参数诊断**：`exploit/src/diag_params.c`（`make diag`，真机 6/6 PASS）
+- **独立时序定位实验**：`exploit/src/ks_probe.c`（`make ks-probe API=34`，普通 WAIT/WAKE，无 PI/requeue 或内核任意写；4096 等待线程，180 秒上限）
 
 ## 环境准备
 
