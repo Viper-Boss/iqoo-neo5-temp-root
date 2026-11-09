@@ -1,3 +1,7 @@
+# NOTE(privacy): device identifiers (IMEI hash / emmcid) that were embedded in
+# this historical script have been REDACTED (<REDACTED_*> placeholders). The
+# script is kept as a methodology record; re-running it requires re-supplying
+# your own device's known-plaintext anchors. See SECURITY.md.
 import json, random, re
 
 conf = open(r'samples/recovery/last_server_cJSON.conf','r',encoding='utf-8').read().strip()

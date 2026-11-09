@@ -1,0 +1,107 @@
+name: CI - Offline Safety Tests
+
+on:
+  push:
+    branches: [ master, analysis/**, chore/** ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Offline tests (no device, no exploit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Python syntax check
+        run: |
+          set -e
+          find scripts tools tests -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
+          echo "OK: all Python files compile"
+
+      - name: CLI --help smoke test
+        run: |
+          set -e
+          for t in scripts/extract_boot_image.py scripts/parse_kallsyms.py \
+                   scripts/verify_kallsyms.py scripts/disasm_futex.py \
+                   scripts/gen_target_offsets.py tests/privacy_scan.py \
+                   tests/check_docs.py; do
+            echo "== $t"
+            python3 "$t" --help > /dev/null
+          done
+          echo "OK: all tools expose --help"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make
+
+      - name: C unit tests (host-only, pure computation)
+        run: |
+          cd exploit
+          make test
+          echo "OK: unit tests passed"
+
+      - name: kallsyms reproducibility (parse from boot.img)
+        run: |
+          set -e
+          python3 scripts/parse_kallsyms.py --from-boot boot.img -o /tmp/kallsyms_regen.txt
+          python3 - <<'PY'
+          a = open('/tmp/kallsyms_regen.txt', 'rb').read().replace(b'\r\n', b'\n')
+          b = open('kallsyms.txt', 'rb').read().replace(b'\r\n', b'\n')
+          assert a == b, "regenerated kallsyms.txt differs from committed file"
+          print("OK: kallsyms.txt is byte-for-byte reproducible from boot.img")
+          PY
+
+      - name: kallsyms 6-way verification
+        run: |
+          python3 scripts/verify_kallsyms.py --from-boot boot.img --kallsyms kallsyms.txt
+
+      - name: futex disassembly evidence check
+        run: |
+          python3 scripts/disasm_futex.py --from-boot boot.img --kallsyms kallsyms.txt --scan-hash \
+            | tee /tmp/disasm.txt
+          grep -q "mm offset" /tmp/disasm.txt || true
+          # key assertions on the disassembly output
+          grep -q "ldr .*#0x580" /tmp/disasm.txt
+          grep -q "found 12 seed sites" /tmp/disasm.txt
+          echo "OK: disassembly evidence reproduced"
+
+      - name: Privacy / secret scan
+        run: python3 tests/privacy_scan.py
+
+      - name: Documentation link check
+        run: python3 tests/check_docs.py
+
+  safety-boundary:
+    name: CI safety boundary (documentation job)
+    runs-on: ubuntu-latest
+    steps:
+      - name: State what this CI does not do
+        run: |
+          echo "=========================================================="
+          echo " This CI performs ONLY offline, read-only checks:"
+          echo "   - Python syntax / --help"
+          echo "   - host C unit tests (pure computation)"
+          echo "   - kallsyms parse/verify from the firmware image in-tree"
+          echo "   - static disassembly assertions"
+          echo "   - privacy scan, documentation link check"
+          echo ""
+          echo " It NEVER: triggers CVE-2026-43499, escalates privileges,"
+          echo " touches a device, writes partitions, or unlocks a bootloader."
+          echo "=========================================================="

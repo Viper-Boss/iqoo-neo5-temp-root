@@ -1,1 +1,4 @@
+# NOTE: Device identifiers (IMEI hash, emmcid) in this sample were REDACTED
+# for privacy before publication. Original values existed in the captured OTA
+# response. See SECURITY.md. The protocol structure itself is unaffected.
 {"fileLength":"7039074100">"version":"9.10.3","url":"http://sysupgrade.vivo.com.cn/dapi2.do?fileName=%40a160970%3D1Wb74zZnMyZ{EQMylyN9YS0gMdN46HMkYHYggQN4FiZ9USMPFQM8DyMwZSN8FSMz1XN90&fileLength=7039074100&up.model=PD2055&up.version=PD2055_N_PD2055MA_9.10.3&up.tail=&up.hardware=PD2055MA&postStyle=false&httpsSupport=0&fileType=full&up.imei=<REDACTED_IMEI_HASH>&up.emmcid=<REDACTED_EMMCID>","checkString":""}

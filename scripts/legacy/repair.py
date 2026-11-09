@@ -1,3 +1,7 @@
+# NOTE(privacy): device identifiers (IMEI hash / emmcid) that were embedded in
+# this historical script have been REDACTED (<REDACTED_*> placeholders). The
+# script is kept as a methodology record; re-running it requires re-supplying
+# your own device's known-plaintext anchors. See SECURITY.md.
 import json
 
 param = open(r'samples/request_param.txt','r').read().strip()

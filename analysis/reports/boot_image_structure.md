@@ -82,7 +82,7 @@ python3 scripts/verify_kallsyms.py --from-boot boot.img --kallsyms kallsyms.txt
    对策见 README §6.5（用 `__start_init_task` 代替 `init_task`；本 exploit 直接改
    cred 而非调用 commit_creds）。
 3. **futex_key 布局与上游 v4.19 相反**：vivo 用旧 mainline 布局 mm@0/address@8，
-   哈希 = jhash2([mm,addr], offset)。详见 `analysis/futex_disassembly_report.md`。
+   哈希 = jhash2([mm,addr], offset)。详见 `analysis/reports/futex_disassembly_report.md`。
 
 > 注：此前"ARM64 Image 头字段被清零"的说法是误判——头字段完好（text_offset=0x80000）。
 
