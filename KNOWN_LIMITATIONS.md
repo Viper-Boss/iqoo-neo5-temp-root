@@ -9,9 +9,9 @@
 | 目标 | 状态 | 说明 |
 |------|------|------|
 | 临时 Root（uid=0） | ❌ **未达成** | 尚未在真机成功获取 |
-| Bootloader 解锁 | ❌ **不可行** | vivo 删除了解锁命令，无公开 firehose |
-| 持久化 Root | ❌ 未实现 | 需要 BL 解锁（不可行）或持久化 exploit（未做） |
-| KernelSnitch mm 定位 | ⏳ 原理成立，未真机验证 | 哈希已与目标内核对齐，参数已修，但未复测 |
+| Bootloader 解锁 | ❌ **未达成** | 原厂 ABL 存在专用处理函数，签名/模式门控未解决 |
+| 持久化 Root | ❌ 未实现 | 尚无已验证方案 |
+| KernelSnitch mm 定位 | ✅ 独立实验两轮各唯一匹配且候选一致 | 无独立内核读取地面真值；不等同于取得 root |
 
 **不要使用"Root 成功"或"BL 已解锁"等未经验证的描述。**
 
@@ -33,9 +33,9 @@
 | 项 | 风险 | 验证方法 |
 |----|------|---------|
 | KIMAGE_TEXT_BASE=0xffffff8008080000 | 高（决定 slide） | 真机 KASLR 泄露 |
-| cred/pipe 结构体字段偏移 | 中（提权写入） | 提取 kheaders（IKHEADERS=y）反汇编 |
+| 完整 target.h 中的结构体字段偏移 | 高（已发现多处与原厂反汇编不符） | 逐字段反汇编及独立交叉验证，见最新报告 |
 | SLIDE_RANDOM_BOOT_ID_DATA | 中（slide 泄露） | 运行时确认 |
-| KernelSnitch 真机定位 | 高（核心路线） | 真机复测 |
+| mm 候选的独立地面真值 | 未完成 | 独立于时序/哈希的验证方式 |
 | vivo SLUB_MIRROR 对堆喷的影响 | 中 | 真机观察 |
 
 ---
@@ -58,7 +58,9 @@
 
 - 完整/noroot payload 均为**活跃 exploit**（触发 CVE-2026-43499 + 写内核内存），非只读
 - CI 与文档**不**提供自动运行 exploit 的流程
-- `diag_params` 是唯一可无条件真机运行的只读工具
+- `diag_params` 只读取参数；独立 `ks_probe` 使用普通 futex 时序，具有线程和时间开销，不能当作完整 exploit 的验证或入口
+
+最新证据与剩余问题：[2026-11-09 真机和固件调查](analysis/reports/device_validation_20261109.md)。
 
 ---
 

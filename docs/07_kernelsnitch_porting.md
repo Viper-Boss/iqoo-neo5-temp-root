@@ -1,5 +1,7 @@
 # 07 - KernelSnitch 移植 / KernelSnitch Porting
 
+> **后续真机验证**：独立普通 futex 实验已在正确线性映射范围内取得两轮一致的唯一候选，详见[最新报告与原始日志](../analysis/reports/device_validation_20261109.md)。下文保留前一阶段的移植记录，其中“尚未重测”的状态已由该报告更新；完整提权链仍未成功。
+
 > **文档状态**: ✅ 已完成  
 > **最后更新**: 2026-11-09  
 > **作者**: Viper-Boss

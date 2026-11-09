@@ -1,0 +1,77 @@
+POINTER flashing get_unlock_ability at decompressed+0x88ce0: ['0x871c5', '0x409dc', '0x871d0', '0x442cc', '0x871ec', '0x4433c', '0x87206']
+POINTER vivo_bsp unlock_vivo at decompressed+0x88dd0: ['0x87291', '0x45344', '0x8729a', '0x4265c', '0x872af', '0x455b0', '0x872bf']
+POINTER bbk unlock_vivo at decompressed+0x88de0: ['0x8729a', '0x4265c', '0x872af', '0x455b0', '0x872bf', '0x42700', '0x872d2']
+
+STRING: fastboot unlock sigdata size error @ 0x869a0
+000425c0: tst w0, #0xff
+000425c4: b.eq #0x425e4
+000425c8: bl #0x4797c
+000425cc: tst w0, #0xff
+000425d0: b.eq #0x425e4
+000425d4: adrp x1, #0x86000
+000425d8: mov w0, #-0x80000000
+000425dc: add x1, x1, #0x9a0
+000425e0: bl #0x21b8
+000425e4: mov w0, #-1
+000425e8: b #0x42638
+000425ec: adrp x22, #0x2a4000
+000425f0: mov w2, #0x200
+000425f4: add x22, x22, #0x5b0
+000425f8: add x8, x22, w21, uxtw
+000425fc: sub x21, x24, #0x134
+00042600: add x0, x8, #0x3a2
+
+STRING: fastboot unlock check Signature fail @ 0x869d0
+000426cc: tst w0, #0xff
+000426d0: b.eq #0x426f0
+000426d4: bl #0x4797c
+000426d8: tst w0, #0xff
+000426dc: b.eq #0x426f0
+000426e0: adrp x1, #0x86000
+000426e4: mov w0, #-0x80000000
+000426e8: add x1, x1, #0x9d0
+000426ec: bl #0x21b8
+000426f0: adrp x0, #0x86000
+000426f4: add x0, x0, #0x9f9
+000426f8: ldr x30, [sp], #0x10
+000426fc: b #0x3f91c
+00042700: str x30, [sp, #-0x10]!
+00042704: bl #0x2ca98
+00042708: tst w0, #0xff
+0004270c: b.eq #0x42720
+
+STRING: fastboot unlock return FAIL @ 0x8824b
+00045290: tst w0, #0xff
+00045294: b.eq #0x452b0
+00045298: bl #0x4797c
+0004529c: tst w0, #0xff
+000452a0: b.eq #0x452b0
+000452a4: adrp x1, #0x88000
+000452a8: add x1, x1, #0x24b
+000452ac: bl #0x47af8
+000452b0: adrp x0, #0x82000
+000452b4: add x0, x0, #0x81e
+000452b8: bl #0x3f9c8
+000452bc: bl #0x479b8
+000452c0: bl #0x3ee2c
+000452c4: bl #0x48188
+000452c8: bl #0x47f68
+000452cc: bl #0x47b58
+
+STRING: unlock device in AT mode! @ 0x88371
+000455c4: b #0x455e0
+000455c8: adrp x8, #0x29c000
+000455cc: add x8, x8, #0x564
+000455d0: ldr w8, [x8, #0xc]
+000455d4: cbz w8, #0x455e8
+000455d8: adrp x0, #0x88000
+000455dc: add x0, x0, #0x371
+000455e0: ldr x30, [sp], #0x10
+000455e4: b #0x3f9c8
+000455e8: adrp x0, #0x88000
+000455ec: add x0, x0, #0x38b
+000455f0: ldr x30, [sp], #0x10
+000455f4: b #0x3f91c
+000455f8: str x30, [sp, #-0x10]!
+000455fc: bl #0x2ca98
+00045600: tst w0, #0xff

@@ -1,0 +1,37 @@
+KS probe: ordinary FUTEX_WAIT/WAKE only; no CVE trigger.
+uid=2000 pid=18101; 39-bit linear map starts at 0xffffffc000000000.
+ROUND=1 (same process/mm, newly mapped target and probes)
+[*] src/kernelsnitch/kernelsnitch.h:323 parameters cpu (16) mm_struct sz (3c0) mm slab order (3) thread cnt (8) collisions (4) mte disabled
+[*] src/kernelsnitch/futex_hash.h:315 futex_init hashsize=0x800 (cpus=8)
+[*] src/kernelsnitch/kernelsnitch.h:332 futex hash mm-dependent: yes (localization sound)
+[*] src/kernelsnitch/kernelsnitch.h:368 target    0000007c79a100d8
+[*] src/kernelsnitch/kernelsnitch.h:382 start finding collisisons
+[*] src/kernelsnitch/kernelsnitch.h:386 collision threshold approx=12 thr=60
+[*] src/kernelsnitch/kernelsnitch.h:400   00000069e48ed768 (before=10 after=12382)
+[*] src/kernelsnitch/kernelsnitch.h:400   00000069e7d349a0 (before=10 after=12438)
+[*] src/kernelsnitch/kernelsnitch.h:400   00000069e918bc58 (before=10 after=10174)
+[*] src/kernelsnitch/kernelsnitch.h:410 found 3 collisisons
+COLLISION[0]=0000007c79a100d8
+COLLISION[1]=00000069e48ed768
+COLLISION[2]=00000069e7d349a0
+COLLISION[3]=00000069e918bc58
+FULL_RANGE_MATCHES=1 (8388608 slabs, 34 objects/slab)
+CANDIDATE=ffffffe2a29fc740 (unique hash match; not verified root).
+ROUND=2 (same process/mm, newly mapped target and probes)
+[*] src/kernelsnitch/kernelsnitch.h:323 parameters cpu (16) mm_struct sz (3c0) mm slab order (3) thread cnt (8) collisions (4) mte disabled
+[*] src/kernelsnitch/futex_hash.h:315 futex_init hashsize=0x800 (cpus=8)
+[*] src/kernelsnitch/kernelsnitch.h:332 futex hash mm-dependent: yes (localization sound)
+[*] src/kernelsnitch/kernelsnitch.h:368 target    0000007c788120d8
+[*] src/kernelsnitch/kernelsnitch.h:382 start finding collisisons
+[*] src/kernelsnitch/kernelsnitch.h:386 collision threshold approx=12 thr=60
+[*] src/kernelsnitch/kernelsnitch.h:400   00000049411c3e18 (before=10 after=12562)
+[*] src/kernelsnitch/kernelsnitch.h:400   0000004941be3f18 (before=10 after=12578)
+[*] src/kernelsnitch/kernelsnitch.h:400   0000004942103818 (before=10 after=12605)
+[*] src/kernelsnitch/kernelsnitch.h:410 found 3 collisisons
+COLLISION[0]=0000007c788120d8
+COLLISION[1]=00000049411c3e18
+COLLISION[2]=0000004941be3f18
+COLLISION[3]=0000004942103818
+FULL_RANGE_MATCHES=1 (8388608 slabs, 34 objects/slab)
+CANDIDATE=ffffffe2a29fc740 (unique hash match; not verified root).
+INDEPENDENT_ROUNDS_AGREE=yes

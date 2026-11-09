@@ -1,8 +1,10 @@
 # iQOO Neo5 (PD2055) Temporary Root Research
 
 > **⚠️ Honest Status**: **No on-device uid=0 achieved, no Bootloader unlock.**
-> This is a kernel security research project, currently at the "parameters fixed, awaiting on-device re-test" stage.
+> An independent ordinary-futex experiment now finds one matching mm candidate in each of two rounds, with both rounds agreeing. The full escalation chain still needs adaptation.
 > Do not be misled by any "Root success / BL unlocked" claims.
+>
+> Latest evidence: [on-device localization, incorrect field offsets, and vendor ABL unlock gates](analysis/reports/device_validation_20261109.md).
 
 ---
 
@@ -12,8 +14,7 @@ Temporary root research for **iQOO Neo5 (V2055A / PD2055, Snapdragon 870 / SM825
 OriginOS 4, kernel 4.19.152-perf+)**. Core approach: port the CVE-2026-43499
 (rtmutex `remove_waiter()` UAF) GhostLock exploit via LD_PRELOAD for in-memory privilege escalation.
 
-This project **does not pursue** persistent Root or Bootloader unlock (the former usually requires unlock,
-the latter has been removed by vivo from ABL).
+Persistent root and Bootloader unlock have not been achieved. Stock ABL retains vendor-specific unlock handlers with signature/state gates; an unknown standard command does not prove that all unlock logic was removed.
 
 ---
 
@@ -26,7 +27,7 @@ the latter has been removed by vivo from ABL).
 | Android | 14 / OriginOS 4 |
 | Firmware | PD2055_A_9.10.3 (compiler10161353, final EOL) |
 | Kernel | 4.19.152-perf+ (arm64, 39-bit VA, KASLR) |
-| Bootloader | **Locked** (no unlock channel) |
+| Bootloader | **Locked** (no verified usable unlock method yet) |
 
 ---
 
@@ -40,9 +41,9 @@ the latter has been removed by vivo from ABL).
 | vivo futex hash model | ✅ **Disassembly conclusion** (mm@0/[mm,addr], ≠upstream v4.19) |
 | Unit tests | ✅ Done (16/16, independent disassembly reference) |
 | Build | ✅ Done (aarch64, NDK r27c) |
-| **KernelSnitch mm localization** | ⏳ **Not on-device verified** (sound in principle, parameters fixed) |
+| **KernelSnitch mm localization** | ✅ Two on-device rounds each find one candidate, and agree; independent kernel-read ground truth remains unavailable |
 | **Temporary Root (uid=0)** | ❌ **Not achieved** |
-| **Bootloader unlock** | ❌ **Not feasible** (command removed) |
+| **Bootloader unlock** | ❌ **Not achieved** (vendor handlers found; authentication/mode gates unresolved) |
 
 ---
 
@@ -54,7 +55,8 @@ the latter has been removed by vivo from ABL).
 - **ARM64 disassembly evidence**: `scripts/disasm_futex.py` (reproduce all futex report evidence)
 - **Symbol offset auto-generation**: `scripts/gen_target_offsets.py`
 - **Independent futex hash unit tests**: `exploit/tests/test_futex_hash.c` (16 tests)
-- **Read-only parameter diagnostic**: `exploit/src/diag_params.c` (`make diag`, the only safe on-device tool)
+- **Read-only parameter diagnostic**: `exploit/src/diag_params.c` (`make diag`, 6/6 checks passed on-device)
+- **Independent timing experiment**: `exploit/src/ks_probe.c` (`make ks-probe API=34`; ordinary WAIT/WAKE only, no PI/requeue or arbitrary kernel writes; 4096 waiters, 180-second limit)
 
 ## Environment Setup
 
